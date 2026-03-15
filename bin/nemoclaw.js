@@ -12,6 +12,14 @@ const SCRIPTS = path.join(ROOT, "scripts");
 const CREDS_DIR = path.join(process.env.HOME || "/tmp", ".nemoclaw");
 const CREDS_FILE = path.join(CREDS_DIR, "credentials.json");
 
+// Auto-detect Colima Docker socket
+if (!process.env.DOCKER_HOST) {
+  const colimaSocket = path.join(process.env.HOME || "/tmp", ".colima/default/docker.sock");
+  if (fs.existsSync(colimaSocket)) {
+    process.env.DOCKER_HOST = `unix://${colimaSocket}`;
+  }
+}
+
 function run(cmd, opts = {}) {
   spawnSync("bash", ["-c", cmd], {
     stdio: "inherit",
