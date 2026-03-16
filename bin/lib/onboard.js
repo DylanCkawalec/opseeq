@@ -156,7 +156,12 @@ async function createSandbox(gpu) {
   if (gpu && gpu.nimCapable) createArgs.push("--gpu");
 
   console.log(`  Creating sandbox '${sandboxName}' (this takes a few minutes on first run)...`);
-  run(`openshell sandbox create ${createArgs.join(" ")} -- env 2>&1 | awk '/Sandbox allocated/{if(!seen){print;seen=1}next}1'`);
+  const chatUiUrl = process.env.CHAT_UI_URL || 'http://127.0.0.1:18789';
+  const envArgs = [`CHAT_UI_URL=${chatUiUrl}`];
+  if (process.env.NVIDIA_API_KEY) {
+    envArgs.push(`NVIDIA_API_KEY=${process.env.NVIDIA_API_KEY}`);
+  }
+  run(`openshell sandbox create ${createArgs.join(" ")} -- env ${envArgs.join(" ")} nemoclaw-start 2>&1 | awk '/Sandbox allocated/{if(!seen){print;seen=1}next}1'`);
 
   // Forward dashboard port separately
   run(`openshell forward start --background 18789 ${sandboxName}`, { ignoreError: true });
@@ -360,8 +365,7 @@ async function setupOpenclaw(sandboxName) {
   // by using sandbox create --no-keep with the same image to exec into it.
   // Simpler: just use sandbox connect which opens a shell — but it doesn't
   // support passing commands. So we run the setup on next connect instead.
-  console.log("  OpenClaw will be configured on first connect.");
-  console.log("  ✓ OpenClaw configured");
+  console.log("  ✓ OpenClaw gateway launched inside sandbox");
 }
 
 // ── Step 7: Policy presets ───────────────────────────────────────
