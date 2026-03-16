@@ -22,6 +22,7 @@ status: published
 
 Move a host-installed OpenClaw into an OpenShell sandbox.
 The migration creates a snapshot of your current state so that you can roll back if needed.
+NemoClaw also inventories external OpenClaw roots referenced by your config, such as custom workspaces, `agentDir` paths, and extra skills directories.
 
 ## Prerequisites
 
@@ -53,9 +54,11 @@ $ openclaw nemoclaw migrate
 The migration performs the following steps:
 
 1. Creates a backup snapshot of your host OpenClaw configuration.
-2. Resolves and verifies the blueprint artifact.
-3. Plans the required OpenShell resources.
-4. Applies the plan by calling the OpenShell CLI.
+2. Captures external OpenClaw roots that live outside the main state directory.
+3. Rewrites those config paths for the sandbox and packages the migration bundle as tar archives so symlinks are preserved.
+4. Resolves and verifies the blueprint artifact.
+5. Plans the required OpenShell resources.
+6. Applies the plan, copies the migration bundle into the sandbox, and verifies the migrated paths.
 
 ## Verify the Migration
 

@@ -2,91 +2,74 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.detectHostOpenClaw = detectHostOpenClaw;
+exports.detectHostOpenClaw = void 0;
 exports.cliMigrate = cliMigrate;
-const node_fs_1 = require("node:fs");
+const node_child_process_1 = require("node:child_process");
 const node_path_1 = require("node:path");
 const resolve_js_1 = require("../blueprint/resolve.js");
 const verify_js_1 = require("../blueprint/verify.js");
 const exec_js_1 = require("../blueprint/exec.js");
 const state_js_1 = require("../blueprint/state.js");
-const HOME = process.env.HOME ?? "/tmp";
-function detectHostOpenClaw() {
-    const configDir = (0, node_path_1.join)(HOME, ".openclaw");
-    const exists = (0, node_fs_1.existsSync)(configDir);
-    if (!exists) {
-        return {
-            exists: false,
-            configDir: null,
-            workspaceDir: null,
-            extensionsDir: null,
-            skillsDir: null,
-            configFile: null,
-        };
-    }
-    const configFile = (0, node_fs_1.existsSync)((0, node_path_1.join)(configDir, "openclaw.json"))
-        ? (0, node_path_1.join)(configDir, "openclaw.json")
-        : null;
-    const workspaceDir = (0, node_fs_1.existsSync)((0, node_path_1.join)(configDir, "workspace"))
-        ? (0, node_path_1.join)(configDir, "workspace")
-        : null;
-    const extensionsDir = (0, node_fs_1.existsSync)((0, node_path_1.join)(configDir, "extensions"))
-        ? (0, node_path_1.join)(configDir, "extensions")
-        : null;
-    const skillsDir = (0, node_fs_1.existsSync)((0, node_path_1.join)(configDir, "skills")) ? (0, node_path_1.join)(configDir, "skills") : null;
-    return {
-        exists: true,
-        configDir,
-        workspaceDir,
-        extensionsDir,
-        skillsDir,
-        configFile,
-    };
-}
+const migration_state_js_1 = require("./migration-state.js");
+var migration_state_js_2 = require("./migration-state.js");
+Object.defineProperty(exports, "detectHostOpenClaw", { enumerable: true, get: function () { return migration_state_js_2.detectHostOpenClaw; } });
+const SANDBOX_ARCHIVE_DIR = "/sandbox/.nemoclaw/migration/archives";
 async function cliMigrate(opts) {
     const { dryRun, profile, skipBackup, logger, pluginConfig } = opts;
     logger.info("NemoClaw migrate: moving host OpenClaw into OpenShell sandbox");
-    // Step 1: Detect host OpenClaw state
     logger.info("Detecting host OpenClaw installation...");
-    const hostState = detectHostOpenClaw();
-    if (!hostState.exists) {
-        logger.error("No OpenClaw installation found at ~/.openclaw");
+    const hostState = (0, migration_state_js_1.detectHostOpenClaw)();
+    if (!hostState.exists || !hostState.stateDir) {
+        logger.error("No OpenClaw installation found for the current host environment.");
         logger.info("Use 'openclaw nemoclaw launch' for a fresh install.");
         return;
     }
-    logger.info(`Found OpenClaw config at ${hostState.configDir ?? "~/.openclaw"}`);
-    if (hostState.configFile)
-        logger.info(`  Config: ${hostState.configFile}`);
+    logger.info(`Resolved state dir: ${hostState.stateDir}`);
+    if (hostState.configPath)
+        logger.info(`  Config: ${hostState.configPath}`);
     if (hostState.workspaceDir)
         logger.info(`  Workspace: ${hostState.workspaceDir}`);
     if (hostState.extensionsDir)
         logger.info(`  Extensions: ${hostState.extensionsDir}`);
     if (hostState.skillsDir)
         logger.info(`  Skills: ${hostState.skillsDir}`);
-    // Step 2: Create snapshot backup
-    let snapshotPath = null;
-    if (!skipBackup) {
-        logger.info("Creating host backup snapshot...");
-        snapshotPath = createSnapshot(hostState, logger);
-        if (!snapshotPath) {
-            logger.error("Failed to create backup snapshot. Use --skip-backup to proceed anyway.");
-            return;
+    if (hostState.hooksDir)
+        logger.info(`  Hooks: ${hostState.hooksDir}`);
+    for (const root of hostState.externalRoots) {
+        logger.info(`  External ${root.kind}: ${root.sourcePath} -> ${root.sandboxPath}`);
+    }
+    for (const warning of hostState.warnings) {
+        logger.warn(warning);
+    }
+    if (hostState.errors.length > 0) {
+        for (const error of hostState.errors) {
+            logger.error(error);
         }
-        logger.info(`Snapshot saved to ${snapshotPath}`);
+        logger.error("Refusing to migrate until all external OpenClaw roots can be resolved.");
+        return;
     }
     if (dryRun) {
         logger.info("");
         logger.info("[Dry run] Would perform the following:");
-        logger.info("  1. Resolve and verify blueprint");
-        logger.info("  2. Create OpenShell sandbox");
-        logger.info("  3. Copy config, workspace, extensions, and skills into sandbox");
-        logger.info("  4. Patch paths for sandbox context");
-        logger.info("  5. Configure inference provider");
-        logger.info("  6. Cut over to sandbox runtime");
-        logger.info("  7. Archive host ~/.openclaw");
+        logger.info(`  1. Snapshot state dir: ${hostState.stateDir}`);
+        if (hostState.configPath && hostState.hasExternalConfig) {
+            logger.info(`  2. Capture external config file: ${hostState.configPath}`);
+        }
+        if (hostState.externalRoots.length > 0) {
+            logger.info("  3. Capture external OpenClaw roots and rewrite config paths for the sandbox:");
+            for (const root of hostState.externalRoots) {
+                logger.info(`     - ${root.sourcePath} -> ${root.sandboxPath}`);
+            }
+            logger.info("  4. Package state and external roots as tar archives to preserve symlinks");
+            logger.info("  5. Copy archives into the OpenShell sandbox and verify the migrated paths");
+        }
+        else {
+            logger.info("  3. Package state dir as a tar archive to preserve symlinks");
+            logger.info("  4. Copy the state archive into the OpenShell sandbox and verify the config");
+        }
+        logger.info("  6. Leave the host installation untouched and keep a rollback snapshot");
         return;
     }
-    // Step 3: Resolve and verify blueprint
     logger.info("Resolving blueprint...");
     const blueprint = await (0, resolve_js_1.resolveBlueprint)(pluginConfig);
     logger.info("Verifying blueprint...");
@@ -95,7 +78,6 @@ async function cliMigrate(opts) {
         logger.error(`Blueprint verification failed: ${verification.errors.join(", ")}`);
         return;
     }
-    // Step 4: Plan migration
     logger.info("Planning migration...");
     const planResult = await (0, exec_js_1.execBlueprint)({
         blueprintPath: blueprint.localPath,
@@ -107,7 +89,6 @@ async function cliMigrate(opts) {
         logger.error(`Migration plan failed: ${planResult.output}`);
         return;
     }
-    // Step 5: Apply migration
     logger.info("Provisioning OpenShell sandbox...");
     const applyResult = await (0, exec_js_1.execBlueprint)({
         blueprintPath: blueprint.localPath,
@@ -118,21 +99,40 @@ async function cliMigrate(opts) {
     }, logger);
     if (!applyResult.success) {
         logger.error(`Migration apply failed: ${applyResult.output}`);
-        if (snapshotPath) {
-            logger.info(`Restore from snapshot: ${snapshotPath}`);
-        }
         return;
     }
-    // Step 6: Save state for eject
-    (0, state_js_1.saveState)({
-        ...(0, state_js_1.loadState)(),
-        lastRunId: applyResult.runId,
-        lastAction: "migrate",
-        blueprintVersion: blueprint.version,
-        sandboxName: pluginConfig.sandboxName,
-        migrationSnapshot: snapshotPath,
-        hostBackupPath: snapshotPath,
-    });
+    logger.info("Creating migration snapshot...");
+    const bundle = (0, migration_state_js_1.createSnapshotBundle)(hostState, logger, { persist: !skipBackup });
+    if (!bundle) {
+        return;
+    }
+    logger.info(`Snapshot saved to ${bundle.snapshotDir}`);
+    try {
+        logger.info("Packaging OpenClaw state for sandbox import...");
+        await buildMigrationArchives(bundle);
+        logger.info("Syncing migration bundle into sandbox...");
+        syncSnapshotBundleIntoSandbox(bundle, pluginConfig.sandboxName);
+        logger.info("Verifying sandbox migration...");
+        verifySandboxMigration(bundle, pluginConfig.sandboxName);
+        (0, state_js_1.saveState)({
+            ...(0, state_js_1.loadState)(),
+            lastRunId: applyResult.runId,
+            lastAction: "migrate",
+            blueprintVersion: blueprint.version,
+            sandboxName: pluginConfig.sandboxName,
+            migrationSnapshot: skipBackup ? null : bundle.snapshotDir,
+            hostBackupPath: skipBackup ? null : bundle.snapshotDir,
+        });
+    }
+    catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        logger.error(`Migration sync failed: ${msg}`);
+        logger.info("Your host installation is unchanged. Resolve the error and rerun migrate.");
+        return;
+    }
+    finally {
+        (0, migration_state_js_1.cleanupSnapshotBundle)(bundle);
+    }
     logger.info("");
     logger.info("Migration complete. OpenClaw is now running inside OpenShell.");
     logger.info(`Sandbox: ${pluginConfig.sandboxName}`);
@@ -143,31 +143,107 @@ async function cliMigrate(opts) {
     logger.info("  openshell term               # Monitor sandbox activity");
     logger.info("");
     logger.info("To rollback to your host installation:");
-    logger.info("  openclaw nemoclaw eject");
+    if (skipBackup) {
+        logger.info("  Re-run migrate without --skip-backup to keep a rollback snapshot.");
+    }
+    else {
+        logger.info("  openclaw nemoclaw eject");
+    }
 }
-function createSnapshot(hostState, logger) {
-    if (!hostState.configDir)
-        return null;
-    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-    const snapshotDir = (0, node_path_1.join)(HOME, ".nemoclaw", "snapshots", timestamp);
+async function buildMigrationArchives(bundle) {
+    await (0, migration_state_js_1.createArchiveFromDirectory)(bundle.preparedStateDir, stateArchivePath(bundle));
+    for (const root of bundle.manifest.externalRoots) {
+        await (0, migration_state_js_1.createArchiveFromDirectory)((0, node_path_1.join)(bundle.snapshotDir, root.snapshotRelativePath), rootArchivePath(bundle, root.id));
+    }
+}
+function syncSnapshotBundleIntoSandbox(bundle, sandboxName) {
+    execSandboxCommand(sandboxName, ["sh", "-lc", `mkdir -p ${shellQuote(SANDBOX_ARCHIVE_DIR)}`]);
+    syncArchive(sandboxName, "state.tar", stateArchivePath(bundle), "/sandbox/.openclaw");
+    for (const root of bundle.manifest.externalRoots) {
+        syncArchive(sandboxName, `${root.id}.tar`, rootArchivePath(bundle, root.id), root.sandboxPath);
+    }
+}
+function syncArchive(sandboxName, archiveName, archivePath, destinationDir) {
+    const sandboxArchivePath = node_path_1.posix.join(SANDBOX_ARCHIVE_DIR, archiveName);
+    (0, node_child_process_1.execFileSync)("openshell", ["sandbox", "cp", archivePath, `${sandboxName}:${sandboxArchivePath}`], {
+        encoding: "utf-8",
+        stdio: ["ignore", "pipe", "pipe"],
+    });
+    const extractCommand = [
+        "sh",
+        "-lc",
+        `mkdir -p ${shellQuote(destinationDir)} && tar -xf ${shellQuote(sandboxArchivePath)} -C ${shellQuote(destinationDir)}`,
+    ];
+    execSandboxCommand(sandboxName, extractCommand);
+}
+function verifySandboxMigration(bundle, sandboxName) {
+    const manifest = (0, migration_state_js_1.loadSnapshotManifest)(bundle.snapshotDir);
+    const verification = {
+        stateDir: "/sandbox/.openclaw",
+        configPath: "/sandbox/.openclaw/openclaw.json",
+        roots: manifest.externalRoots.map((root) => ({
+            id: root.id,
+            sandboxPath: root.sandboxPath,
+            bindings: root.bindings.map((binding) => ({
+                path: binding.configPath,
+                value: root.sandboxPath,
+            })),
+            symlinkPaths: root.symlinkPaths,
+        })),
+    };
+    const script = `
+const fs = require("node:fs");
+const verification = ${JSON.stringify(verification)};
+if (!fs.existsSync(verification.stateDir)) {
+  throw new Error(\`Missing migrated state dir: \${verification.stateDir}\`);
+}
+const config = JSON.parse(fs.readFileSync(verification.configPath, "utf-8"));
+const get = (obj, path) => path.match(/[^.[\\]]+/g).reduce((value, token) => value?.[Number.isInteger(Number(token)) ? Number(token) : token], obj);
+for (const root of verification.roots) {
+  if (!fs.existsSync(root.sandboxPath)) {
+    throw new Error(\`Missing migrated root: \${root.sandboxPath}\`);
+  }
+  for (const binding of root.bindings) {
+    const actual = get(config, binding.path);
+    if (actual !== binding.value) {
+      throw new Error(\`Config path \${binding.path} expected \${binding.value} but found \${actual}\`);
+    }
+  }
+  for (const relativePath of root.symlinkPaths) {
+    const targetPath = relativePath === "." ? root.sandboxPath : require("node:path").join(root.sandboxPath, relativePath);
+    const stat = fs.lstatSync(targetPath);
+    if (!stat.isSymbolicLink()) {
+      throw new Error(\`Expected symlink after migration: \${targetPath}\`);
+    }
+  }
+}
+`;
+    execSandboxCommand(sandboxName, ["node", "-e", script]);
+}
+function execSandboxCommand(sandboxName, args) {
     try {
-        (0, node_fs_1.mkdirSync)(snapshotDir, { recursive: true });
-        (0, node_fs_1.cpSync)(hostState.configDir, (0, node_path_1.join)(snapshotDir, "openclaw"), {
-            recursive: true,
+        (0, node_child_process_1.execFileSync)("openshell", ["sandbox", "connect", sandboxName, "--", ...args], {
+            encoding: "utf-8",
+            stdio: ["ignore", "pipe", "pipe"],
         });
-        // Record what was captured
-        const manifest = {
-            timestamp,
-            source: hostState.configDir,
-            contents: (0, node_fs_1.readdirSync)((0, node_path_1.join)(snapshotDir, "openclaw")),
-        };
-        (0, node_fs_1.writeFileSync)((0, node_path_1.join)(snapshotDir, "snapshot.json"), JSON.stringify(manifest, null, 2));
-        return snapshotDir;
     }
     catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        logger.error(`Snapshot failed: ${msg}`);
-        return null;
+        const stderr = err &&
+            typeof err === "object" &&
+            "stderr" in err &&
+            typeof err.stderr === "string"
+            ? err.stderr.trim()
+            : "";
+        throw new Error(stderr || String(err));
     }
+}
+function stateArchivePath(bundle) {
+    return (0, node_path_1.join)(bundle.archivesDir, "state.tar");
+}
+function rootArchivePath(bundle, rootId) {
+    return (0, node_path_1.join)(bundle.archivesDir, `${rootId}.tar`);
+}
+function shellQuote(input) {
+    return `'${input.replace(/'/g, `'\\''`)}'`;
 }
 //# sourceMappingURL=migrate.js.map

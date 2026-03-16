@@ -1,11 +1,12 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-import { existsSync, cpSync, renameSync, mkdirSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import type { PluginLogger, NemoClawConfig } from "../index.js";
 import { execBlueprint } from "../blueprint/exec.js";
 import { loadState, clearState } from "../blueprint/state.js";
+import { restoreSnapshotToHost } from "./migration-state.js";
 
 const HOME = process.env.HOME ?? "/tmp";
 
@@ -77,24 +78,9 @@ export async function cliEject(opts: EjectOptions): Promise<void> {
     }
   }
 
-  // Step 2: Restore host ~/.openclaw from snapshot
-  const currentConfigDir = join(HOME, ".openclaw");
-
-  try {
-    // Archive current sandbox-managed config
-    if (existsSync(currentConfigDir)) {
-      const archiveName = `${currentConfigDir}.nemoclaw-archived-${String(Date.now())}`;
-      renameSync(currentConfigDir, archiveName);
-      logger.info(`Archived current config to ${archiveName}`);
-    }
-
-    // Restore from snapshot
-    mkdirSync(currentConfigDir, { recursive: true });
-    cpSync(snapshotOpenClawDir, currentConfigDir, { recursive: true });
-    logger.info("Host OpenClaw configuration restored.");
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
-    logger.error(`Restoration failed: ${msg}`);
+  // Step 2: Restore host state using the original snapshot manifest paths.
+  const restored = restoreSnapshotToHost(snapshotPath, logger);
+  if (!restored) {
     logger.info(`Manual restore available at: ${snapshotOpenClawDir}`);
     return;
   }

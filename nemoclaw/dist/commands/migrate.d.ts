@@ -1,13 +1,5 @@
 import type { PluginLogger, NemoClawConfig } from "../index.js";
-export interface HostOpenClawState {
-    exists: boolean;
-    configDir: string | null;
-    workspaceDir: string | null;
-    extensionsDir: string | null;
-    skillsDir: string | null;
-    configFile: string | null;
-}
-export declare function detectHostOpenClaw(): HostOpenClawState;
+export { detectHostOpenClaw, type HostOpenClawState } from "./migration-state.js";
 export interface MigrateOptions {
     dryRun: boolean;
     profile: string;

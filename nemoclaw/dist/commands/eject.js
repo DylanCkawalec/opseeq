@@ -7,6 +7,7 @@ const node_fs_1 = require("node:fs");
 const node_path_1 = require("node:path");
 const exec_js_1 = require("../blueprint/exec.js");
 const state_js_1 = require("../blueprint/state.js");
+const migration_state_js_1 = require("./migration-state.js");
 const HOME = process.env.HOME ?? "/tmp";
 async function cliEject(opts) {
     const { confirm, runId, logger } = opts;
@@ -57,23 +58,9 @@ async function cliEject(opts) {
             }
         }
     }
-    // Step 2: Restore host ~/.openclaw from snapshot
-    const currentConfigDir = (0, node_path_1.join)(HOME, ".openclaw");
-    try {
-        // Archive current sandbox-managed config
-        if ((0, node_fs_1.existsSync)(currentConfigDir)) {
-            const archiveName = `${currentConfigDir}.nemoclaw-archived-${String(Date.now())}`;
-            (0, node_fs_1.renameSync)(currentConfigDir, archiveName);
-            logger.info(`Archived current config to ${archiveName}`);
-        }
-        // Restore from snapshot
-        (0, node_fs_1.mkdirSync)(currentConfigDir, { recursive: true });
-        (0, node_fs_1.cpSync)(snapshotOpenClawDir, currentConfigDir, { recursive: true });
-        logger.info("Host OpenClaw configuration restored.");
-    }
-    catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        logger.error(`Restoration failed: ${msg}`);
+    // Step 2: Restore host state using the original snapshot manifest paths.
+    const restored = (0, migration_state_js_1.restoreSnapshotToHost)(snapshotPath, logger);
+    if (!restored) {
         logger.info(`Manual restore available at: ${snapshotOpenClawDir}`);
         return;
     }

@@ -58,7 +58,7 @@ WORKDIR /sandbox
 USER sandbox
 
 # Simulate a host OpenClaw installation for migration testing.
-# Uses real OpenClaw config schema (passes `openclaw doctor` validation).
+# Keep the legacy ~/.openclaw fixture for the blueprint snapshot tests.
 RUN mkdir -p /sandbox/.openclaw/workspace /sandbox/.openclaw/extensions /sandbox/.openclaw/skills /sandbox/.openclaw/hooks/demo-hook \
     && chmod 700 /sandbox/.openclaw \
     && printf '%s\n' \
@@ -84,5 +84,45 @@ RUN mkdir -p /sandbox/.openclaw/workspace /sandbox/.openclaw/extensions /sandbox
     && echo "test-workspace-file" > /sandbox/.openclaw/workspace/project.md \
     && printf '%s\n' '---' 'name: demo-hook' 'description: Demo hook fixture' '---' > /sandbox/.openclaw/hooks/demo-hook/HOOK.md \
     && printf '%s\n' 'export default async function demoHook() {}' > /sandbox/.openclaw/hooks/demo-hook/handler.js
+
+# Additional fixture for the TypeScript migration inventory:
+# - external state dir via OPENCLAW_STATE_DIR
+# - external config via OPENCLAW_CONFIG_PATH
+# - external workspace/agentDir/skills dir under /sandbox/clawd
+# - symlink inside the workspace to verify tar-based preservation
+RUN mkdir -p /sandbox/openclaw-state/extensions /sandbox/openclaw-state/skills /sandbox/openclaw-state/hooks/demo-hook \
+        /sandbox/clawd/main-workspace /sandbox/clawd/main-agent /sandbox/clawd/skills-extra /sandbox/config \
+    && printf '%s\n' \
+        '{' \
+        '  "agents": {' \
+        '    "defaults": {' \
+        '      "workspace": "/sandbox/clawd/main-workspace"' \
+        '    },' \
+        '    "list": [' \
+        '      {' \
+        '        "id": "main",' \
+        '        "workspace": "/sandbox/clawd/main-workspace",' \
+        '        "agentDir": "/sandbox/clawd/main-agent"' \
+        '      }' \
+        '    ]' \
+        '  },' \
+        '  "skills": {' \
+        '    "load": {' \
+        '      "extraDirs": ["/sandbox/clawd/skills-extra"]' \
+        '    }' \
+        '  },' \
+        '  "meta": {' \
+        '    "lastTouchedVersion": "2026.3.11",' \
+        '    "lastTouchedAt": "2026-03-14T00:00:00.000Z"' \
+        '  }' \
+        '}' > /sandbox/config/openclaw.json \
+    && printf '%s\n' 'external-workspace-file' > /sandbox/clawd/main-workspace/project.md \
+    && printf '%s\n' 'shared-notes' > /sandbox/clawd/shared-note.md \
+    && ln -s /sandbox/clawd/shared-note.md /sandbox/clawd/main-workspace/shared-link.md \
+    && printf '%s\n' 'agent-auth' > /sandbox/clawd/main-agent/auth.json \
+    && printf '%s\n' 'extra-skill' > /sandbox/clawd/skills-extra/SKILL.md \
+    && printf '%s\n' 'managed-skill' > /sandbox/openclaw-state/skills/test.md \
+    && printf '%s\n' '---' 'name: override-hook' 'description: Override hook fixture' '---' > /sandbox/openclaw-state/hooks/demo-hook/HOOK.md \
+    && printf '%s\n' 'export default async function overrideHook() {}' > /sandbox/openclaw-state/hooks/demo-hook/handler.js
 
 ENTRYPOINT ["/bin/bash"]

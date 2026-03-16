@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import type { PluginLogger, NemoClawConfig } from "../index.js";
 import {
   loadOnboardConfig,
@@ -91,6 +91,13 @@ function showConfig(config: NemoClawOnboardConfig, logger: PluginLogger): void {
   logger.info(`  Credential:  $${config.credentialEnv}`);
   logger.info(`  Profile:     ${config.profile}`);
   logger.info(`  Onboarded:   ${config.onboardedAt}`);
+}
+
+function execOpenShell(args: string[]): string {
+  return execFileSync("openshell", args, {
+    encoding: "utf-8",
+    stdio: ["pipe", "pipe", "pipe"],
+  });
 }
 
 export async function cliOnboard(opts: OnboardOptions): Promise<void> {
@@ -275,22 +282,18 @@ export async function cliOnboard(opts: OnboardOptions): Promise<void> {
 
   // 7a: Create/update provider
   try {
-    const result = execSync(
-      [
-        "openshell",
-        "provider",
-        "create",
-        "--name",
-        providerName,
-        "--type",
-        "openai",
-        "--credential",
-        `${credentialEnv}=${apiKey}`,
-        "--config",
-        `OPENAI_BASE_URL=${endpointUrl}`,
-      ].join(" "),
-      { encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] },
-    );
+    const result = execOpenShell([
+      "provider",
+      "create",
+      "--name",
+      providerName,
+      "--type",
+      "openai",
+      "--credential",
+      `${credentialEnv}=${apiKey}`,
+      "--config",
+      `OPENAI_BASE_URL=${endpointUrl}`,
+    ]);
     if (result.includes("AlreadyExists")) {
       logger.info(`Provider '${providerName}' already exists, reusing.`);
     } else {
@@ -308,10 +311,7 @@ export async function cliOnboard(opts: OnboardOptions): Promise<void> {
 
   // 7b: Set inference route
   try {
-    execSync(
-      ["openshell", "inference", "set", "--provider", providerName, "--model", model].join(" "),
-      { encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] },
-    );
+    execOpenShell(["inference", "set", "--provider", providerName, "--model", model]);
     logger.info(`Inference route set: ${providerName} -> ${model}`);
   } catch (err) {
     const stderr = err instanceof Error && "stderr" in err ? String((err as { stderr: unknown }).stderr) : "";

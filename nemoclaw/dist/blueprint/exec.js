@@ -25,6 +25,8 @@ async function execBlueprint(options, logger) {
         args.push("--run-id", options.runId);
     if (options.dryRun)
         args.push("--dry-run");
+    if (options.endpointUrl)
+        args.push("--endpoint-url", options.endpointUrl);
     logger.info(`Running blueprint: ${options.action} (profile: ${options.profile})`);
     return new Promise((resolve) => {
         const chunks = [];

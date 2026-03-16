@@ -115,10 +115,105 @@ print(f'Restored config: {restored}')
 " && pass "Snapshot rollback restores original config" || fail "Rollback failed"
 
 # -------------------------------------------------------
-info "8. Verify plugin TypeScript compilation"
+info "8. Verify migration inventory for external OpenClaw roots"
+# -------------------------------------------------------
+OPENCLAW_STATE_DIR=/sandbox/openclaw-state OPENCLAW_CONFIG_PATH=/sandbox/config/openclaw.json node --input-type=module <<'JS'
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { execFileSync } from "node:child_process";
+import {
+  cleanupSnapshotBundle,
+  createArchiveFromDirectory,
+  createSnapshotBundle,
+  detectHostOpenClaw,
+} from "/opt/nemoclaw/dist/commands/migration-state.js";
+
+const logger = {
+  info() {},
+  warn() {},
+  error(message) {
+    throw new Error(String(message));
+  },
+  debug() {},
+};
+
+const state = detectHostOpenClaw(process.env);
+if (!state.exists) {
+  throw new Error("detectHostOpenClaw did not find the overridden install");
+}
+if (state.stateDir !== "/sandbox/openclaw-state") {
+  throw new Error(`Unexpected state dir: ${state.stateDir}`);
+}
+if (state.configPath !== "/sandbox/config/openclaw.json") {
+  throw new Error(`Unexpected config path: ${state.configPath}`);
+}
+if (state.externalRoots.length < 3) {
+  throw new Error(`Expected at least 3 external roots, got ${state.externalRoots.length}`);
+}
+
+const bundle = createSnapshotBundle(state, logger, { persist: false });
+if (!bundle) {
+  throw new Error("createSnapshotBundle returned null");
+}
+
+try {
+  const workspaceRoot = bundle.manifest.externalRoots.find((root) => root.kind === "workspace");
+  if (!workspaceRoot) {
+    throw new Error("Missing workspace root in manifest");
+  }
+  const snapshotLink = path.join(
+    bundle.snapshotDir,
+    workspaceRoot.snapshotRelativePath,
+    "shared-link.md",
+  );
+  if (!fs.lstatSync(snapshotLink).isSymbolicLink()) {
+    throw new Error(`Snapshot did not preserve symlink: ${snapshotLink}`);
+  }
+
+  const sandboxConfig = JSON.parse(
+    fs.readFileSync(path.join(bundle.preparedStateDir, "openclaw.json"), "utf-8"),
+  );
+  if (sandboxConfig.agents.defaults.workspace !== workspaceRoot.sandboxPath) {
+    throw new Error(
+      `Sandbox config was not rewritten for default workspace: ${sandboxConfig.agents.defaults.workspace}`,
+    );
+  }
+  if (sandboxConfig.agents.list[0].agentDir !== "/sandbox/.nemoclaw/migration/agent-dirs/agent-dirs-main-agent-dir") {
+    throw new Error(`Sandbox config did not rewrite agentDir: ${sandboxConfig.agents.list[0].agentDir}`);
+  }
+
+  const archivePath = path.join(bundle.archivesDir, "workspace.tar");
+  await createArchiveFromDirectory(path.join(bundle.snapshotDir, workspaceRoot.snapshotRelativePath), archivePath);
+  const extractDir = fs.mkdtempSync(path.join(os.tmpdir(), "nemoclaw-archive-"));
+  execFileSync("tar", ["-xf", archivePath, "-C", extractDir]);
+  const extractedLink = path.join(extractDir, "shared-link.md");
+  if (!fs.lstatSync(extractedLink).isSymbolicLink()) {
+    throw new Error(`Tar archive did not preserve symlink: ${extractedLink}`);
+  }
+
+  const fallbackHome = fs.mkdtempSync(path.join(os.tmpdir(), "nemoclaw-userprofile-"));
+  fs.mkdirSync(path.join(fallbackHome, ".openclaw"), { recursive: true });
+  fs.writeFileSync(path.join(fallbackHome, ".openclaw", "openclaw.json"), "{}");
+  const fallbackState = detectHostOpenClaw({
+    HOME: "",
+    USERPROFILE: fallbackHome,
+  });
+  if (!fallbackState.exists || fallbackState.stateDir !== path.join(fallbackHome, ".openclaw")) {
+    throw new Error("USERPROFILE fallback did not resolve the host OpenClaw state");
+  }
+} finally {
+  cleanupSnapshotBundle(bundle);
+}
+JS
+pass "Migration inventory handles overrides, external roots, and symlink-safe archives"
+
+# -------------------------------------------------------
+info "9. Verify plugin TypeScript compilation"
 # -------------------------------------------------------
 [ -f /opt/nemoclaw/dist/index.js ] && pass "index.js compiled" || fail "index.js missing"
 [ -f /opt/nemoclaw/dist/commands/migrate.js ] && pass "migrate.js compiled" || fail "migrate.js missing"
+[ -f /opt/nemoclaw/dist/commands/migration-state.js ] && pass "migration-state.js compiled" || fail "migration-state.js missing"
 [ -f /opt/nemoclaw/dist/commands/launch.js ] && pass "launch.js compiled" || fail "launch.js missing"
 [ -f /opt/nemoclaw/dist/commands/connect.js ] && pass "connect.js compiled" || fail "connect.js missing"
 [ -f /opt/nemoclaw/dist/commands/eject.js ] && pass "eject.js compiled" || fail "eject.js missing"
@@ -130,7 +225,7 @@ info "8. Verify plugin TypeScript compilation"
 [ -f /opt/nemoclaw/dist/blueprint/state.js ] && pass "state.js compiled" || fail "state.js missing"
 
 # -------------------------------------------------------
-info "9. Verify NemoClaw state management"
+info "10. Verify NemoClaw state management"
 # -------------------------------------------------------
 node -e "
 const { loadState, saveState, clearState } = require('/opt/nemoclaw/dist/blueprint/state.js');

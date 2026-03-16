@@ -8,6 +8,7 @@ export interface BlueprintRunOptions {
     runId?: string;
     jsonOutput?: boolean;
     dryRun?: boolean;
+    endpointUrl?: string;
 }
 export interface BlueprintRunResult {
     success: boolean;

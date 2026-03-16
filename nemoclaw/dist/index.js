@@ -6,6 +6,7 @@ exports.getPluginConfig = getPluginConfig;
 exports.default = register;
 const cli_js_1 = require("./cli.js");
 const slash_js_1 = require("./commands/slash.js");
+const config_js_1 = require("./onboard/config.js");
 const DEFAULT_PLUGIN_CONFIG = {
     blueprintVersion: "latest",
     blueprintRegistry: "ghcr.io/nvidia/nemoclaw-blueprint",
@@ -44,13 +45,18 @@ function register(api) {
     api.registerCli((cliCtx) => {
         (0, cli_js_1.registerCliCommands)(cliCtx, api);
     }, { commands: ["nemoclaw"] });
-    // 3. Register nvidia-nim provider for build.nvidia.com models
+    // 3. Register nvidia-nim provider — use onboard config if available
+    const onboardCfg = (0, config_js_1.loadOnboardConfig)();
+    const providerCredentialEnv = onboardCfg?.credentialEnv ?? "NVIDIA_API_KEY";
+    const providerLabel = onboardCfg
+        ? `NVIDIA NIM (${onboardCfg.endpointType}${onboardCfg.ncpPartner ? ` - ${onboardCfg.ncpPartner}` : ""})`
+        : "NVIDIA NIM (build.nvidia.com)";
     api.registerProvider({
         id: "nvidia-nim",
-        label: "NVIDIA NIM (build.nvidia.com)",
+        label: providerLabel,
         docsPath: "https://build.nvidia.com/docs",
         aliases: ["nvidia", "nim"],
-        envVars: ["NVIDIA_API_KEY"],
+        envVars: [providerCredentialEnv],
         models: {
             chat: [
                 {
@@ -82,19 +88,20 @@ function register(api) {
         auth: [
             {
                 type: "bearer",
-                envVar: "NVIDIA_API_KEY",
+                envVar: providerCredentialEnv,
                 headerName: "Authorization",
-                label: "NVIDIA API Key (from build.nvidia.com)",
+                label: `NVIDIA API Key (${providerCredentialEnv})`,
             },
         ],
     });
+    const bannerEndpoint = onboardCfg?.endpointType ?? "build.nvidia.com";
+    const bannerModel = onboardCfg?.model ?? "nvidia/nemotron-3-super-120b-a12b";
     api.logger.info("");
     api.logger.info("  ┌─────────────────────────────────────────────────────┐");
     api.logger.info("  │  NemoClaw registered                                │");
     api.logger.info("  │                                                     │");
-    api.logger.info("  │  Provider:  nvidia-nim (build.nvidia.com)           │");
-    api.logger.info("  │  Model:     nvidia/nemotron-3-super-120b-a12b       │");
-    api.logger.info("  │             Nemotron 3 Super 120B                   │");
+    api.logger.info(`  │  Endpoint:  ${bannerEndpoint.padEnd(40)}│`);
+    api.logger.info(`  │  Model:     ${bannerModel.padEnd(40)}│`);
     api.logger.info("  │  Commands:  openclaw nemoclaw <command>             │");
     api.logger.info("  └─────────────────────────────────────────────────────┘");
     api.logger.info("");
