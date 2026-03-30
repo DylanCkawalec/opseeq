@@ -1,0 +1,12 @@
+{
+  "name": "opseeq-dashboard",
+  "version": "1.0.0",
+  "description": "Opseeq runtime dashboard and app launcher",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.22.1"
+  }
+}

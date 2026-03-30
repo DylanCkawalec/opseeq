@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Opseeq</title>
+  <link rel="icon" type="image/png" href="/opseeq-icon.png">
+  <link rel="apple-touch-icon" href="/opseeq-icon.png">
+  <link rel="stylesheet" href="/css/opseeq.css">
+</head>
+<body>
+
+<!-- ── Landing ──────────────────────────────────── -->
+<div id="landing" class="landing">
+  <img src="/opseeq-logo.svg" alt="Opseeq" class="landing-logo">
+  <h1>Your desktop intelligence runtime.</h1>
+  <p>Orchestrate Mermate, Synth, and local AI from one place.</p>
+  <div class="landing-health">
+    <span class="health-dot" id="landing-dot"></span>
+    <span id="landing-status">Checking gateway...</span>
+  </div>
+  <button class="btn-primary" id="btn-launch">Launch Dashboard</button>
+</div>
+
+<!-- ── Dashboard ────────────────────────────────── -->
+<div class="dashboard" id="dashboard" style="display:none;">
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <img src="/opseeq-logo.svg" alt="Opseeq" class="sidebar-logo">
+
+    <div class="sidebar-section">
+      <div class="sidebar-label">Runtime</div>
+      <div class="sidebar-item">
+        <span class="dot" id="dot-kernel"></span>
+        <span class="label">Kernel</span>
+        <span class="meta" id="meta-version">--</span>
+      </div>
+      <div class="sidebar-item">
+        <span class="dot gray"></span>
+        <span class="label">Providers</span>
+        <span class="meta" id="meta-providers">--</span>
+      </div>
+      <div class="sidebar-item">
+        <span class="dot gray"></span>
+        <span class="label">Models</span>
+        <span class="meta" id="meta-models">--</span>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-label">Connected Apps</div>
+      <div class="sidebar-item">
+        <span class="dot" id="dot-mermate"></span>
+        <span class="label">Mermate</span>
+        <span class="meta">:3333</span>
+      </div>
+      <div class="sidebar-item">
+        <span class="dot" id="dot-synth"></span>
+        <span class="label">Synth</span>
+        <span class="meta">:8420</span>
+      </div>
+      <div class="sidebar-item">
+        <span class="dot" id="dot-ollama"></span>
+        <span class="label">Ollama</span>
+        <span class="meta" id="meta-ollama-models">--</span>
+      </div>
+    </div>
+
+    <div class="sidebar-section" style="margin-top:auto;">
+      <div class="sidebar-label">Gateway</div>
+      <div class="sidebar-item" style="font-family:monospace; font-size:11px; color:var(--text-dim);">
+        localhost:9090
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <main class="main">
+    <div class="main-header">
+      <h2>Dashboard</h2>
+      <span class="version-badge" id="version-badge">v--</span>
+    </div>
+
+    <!-- App cards -->
+    <div class="cards">
+      <!-- Mermate -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-icon mermate">M</div>
+          <div>
+            <div class="card-title">Mermate</div>
+            <div class="card-subtitle">Architecture &amp; specification copilot</div>
+          </div>
+        </div>
+        <div class="card-body" id="mermate-body">
+          <div class="card-stat"><span class="key">Status</span><span class="val" id="mermate-status">--</span></div>
+          <div class="card-stat"><span class="key">Agents</span><span class="val" id="mermate-agents">--</span></div>
+          <div class="card-stat"><span class="key">TLA+</span><span class="val" id="mermate-tla">--</span></div>
+          <div class="card-stat"><span class="key">TypeScript</span><span class="val" id="mermate-ts">--</span></div>
+        </div>
+        <a href="http://localhost:3333" target="_blank" class="btn-open">Open Mermate</a>
+      </div>
+
+      <!-- Synth -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-icon synth">S</div>
+          <div>
+            <div class="card-title">Synth</div>
+            <div class="card-subtitle">Prediction market trading desk</div>
+          </div>
+        </div>
+        <div class="card-body" id="synth-body">
+          <div class="card-stat"><span class="key">Status</span><span class="val" id="synth-status">--</span></div>
+          <div class="card-stat"><span class="key">Simulation</span><span class="val" id="synth-sim">--</span></div>
+          <div class="card-stat"><span class="key">Predictions</span><span class="val" id="synth-pred">--</span></div>
+          <div class="card-stat"><span class="key">AI Engine</span><span class="val" id="synth-ai">--</span></div>
+        </div>
+        <a href="http://localhost:8420" target="_blank" class="btn-open">Open Synth</a>
+      </div>
+
+      <!-- Ollama -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-icon ollama">O</div>
+          <div>
+            <div class="card-title">Ollama</div>
+            <div class="card-subtitle">Local model inference</div>
+          </div>
+        </div>
+        <div class="card-body" id="ollama-body">
+          <div class="card-stat"><span class="key">Status</span><span class="val" id="ollama-status">--</span></div>
+          <div class="card-stat"><span class="key">Default</span><span class="val" id="ollama-default">--</span></div>
+          <div class="card-stat"><span class="key">Models</span><span class="val" id="ollama-count">--</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Kernel panel -->
+    <div class="kernel-grid">
+      <div>
+        <div class="card" style="height:100%;">
+          <div class="card-header">
+            <div class="card-icon kernel">K</div>
+            <div>
+              <div class="card-title">Runtime Kernel</div>
+              <div class="card-subtitle">opseeq-core (Rust)</div>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="card-stat"><span class="key">Uptime</span><span class="val" id="kernel-uptime">--</span></div>
+            <div class="card-stat"><span class="key">MCP</span><span class="val" id="kernel-mcp">--</span></div>
+          </div>
+          <div class="sidebar-label" style="margin-top:8px;">Providers</div>
+          <div class="provider-list" id="provider-list"></div>
+        </div>
+      </div>
+      <div class="events-panel">
+        <h4>Recent Events</h4>
+        <div id="events-list">
+          <div class="event-line" style="color:var(--text-dim);">Waiting for events...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Plugin connector -->
+    <div class="plugin-section">
+      <h3>Connect a New App</h3>
+      <p style="font-size:13px; color:var(--text-muted); margin-bottom:16px;">Paste a local repo path to generate the Opseeq connection config.</p>
+      <div class="plugin-input-row">
+        <input type="text" class="plugin-input" id="plugin-path" placeholder="/Users/you/Desktop/developer/my-app">
+        <button class="btn-primary" style="padding:10px 20px; font-size:13px;" id="btn-connect">Generate</button>
+      </div>
+      <div class="plugin-output" id="plugin-output"></div>
+    </div>
+  </main>
+</div>
+
+<script src="/js/landing.js"></script>
+<script src="/js/app.js"></script>
+</body>
+</html>
