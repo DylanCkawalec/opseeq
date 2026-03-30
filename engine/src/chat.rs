@@ -331,6 +331,72 @@ async fn handle_slash(
             }
         }
 
+        "/scan" => {
+            let dir = if arg.is_empty() { "~/Desktop/developer" } else { arg };
+            let expanded = if dir.starts_with("~/") {
+                format!("{}{}", std::env::var("HOME").unwrap_or_default(), &dir[1..])
+            } else { dir.to_string() };
+            let result = probe::scan_directory(&expanded);
+            let repos = result["repos"].as_array();
+            println!("  Scanned: {}", result["path"].as_str().unwrap_or("?"));
+            println!("  Found:   {} repos", result["repos_found"]);
+            if let Some(repos) = repos {
+                for r in repos {
+                    let connected = if r["opseeq_connected"].as_bool().unwrap_or(false) { "\x1b[32m●\x1b[0m" } else { "\x1b[31m○\x1b[0m" };
+                    let project = if r["has_cargo_toml"].as_bool().unwrap_or(false) { "Rust" }
+                        else if r["has_package_json"].as_bool().unwrap_or(false) { "Node" }
+                        else { "?" };
+                    println!("  {} {:30} {:6} mcp={}", connected, r["name"].as_str().unwrap_or("?"), project, r["has_mcp_json"].as_bool().unwrap_or(false));
+                }
+            }
+        }
+
+        "/verify" => {
+            if arg.is_empty() {
+                println!("  Usage: /verify <path_to_binary>");
+            } else {
+                let expanded = if arg.starts_with("~/") {
+                    format!("{}{}", std::env::var("HOME").unwrap_or_default(), &arg[1..])
+                } else { arg.to_string() };
+                let result = probe::verify_binary(&expanded);
+                println!("  Path:       {}", result["path"].as_str().unwrap_or("?"));
+                println!("  Exists:     {}", result["exists"]);
+                println!("  Executable: {}", result["is_executable"]);
+                println!("  Size:       {} bytes", result["size_bytes"]);
+                if result["is_app_bundle"].as_bool().unwrap_or(false) { println!("  Type:       macOS .app bundle"); }
+            }
+        }
+
+        "/organize" => {
+            if arg.is_empty() {
+                println!("  Usage: /organize <repo_path>");
+            } else {
+                let expanded = if arg.starts_with("~/") {
+                    format!("{}{}", std::env::var("HOME").unwrap_or_default(), &arg[1..])
+                } else { arg.to_string() };
+                let p = std::path::Path::new(&expanded);
+                if !p.is_dir() { println!("  Not a directory: {expanded}"); }
+                else {
+                    let env_path = p.join(".env");
+                    if !env_path.exists() {
+                        let _ = std::fs::write(&env_path, "# Opseeq connection\nOPENAI_BASE_URL=http://localhost:9090/v1\nOPSEEQ_URL=http://localhost:9090\n");
+                        println!("  Created .env with Opseeq vars");
+                    } else { println!("  .env exists"); }
+
+                    let mcp_path = p.join(".mcp.json");
+                    if !mcp_path.exists() {
+                        let _ = std::fs::write(&mcp_path, "{\"mcpServers\":{\"opseeq\":{\"url\":\"http://localhost:9090/mcp\"}}}\n");
+                        println!("  Created .mcp.json for Opseeq MCP");
+                    } else { println!("  .mcp.json exists"); }
+
+                    for f in ["package.json", "Cargo.toml", "README.md", "run.sh"] {
+                        let status = if p.join(f).exists() { "found" } else { "MISSING" };
+                        println!("  {f:20} {status}");
+                    }
+                }
+            }
+        }
+
         "/clear" => {
             messages.clear();
             println!("Conversation cleared.");
@@ -351,6 +417,9 @@ async fn handle_slash(
             println!("  /synth predict <q>  Generate prediction");
             println!("  /synth history      Recent predictions");
             println!("  /synth markets <q>  Search markets");
+            println!("  /scan [path]        Scan desktop for repos");
+            println!("  /verify <path>      Verify a binary/app");
+            println!("  /organize <path>    Clean up repo for Opseeq");
             println!("  /clear              Clear history");
             println!("  /quit               Exit");
         }

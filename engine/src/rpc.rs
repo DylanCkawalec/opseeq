@@ -202,6 +202,32 @@ async fn dispatch(client: &reqwest::Client, config: &KernelConfig, req: &RpcRequ
                 error: None,
             }
         }
+        "desktop.scan" => {
+            let dir = req.params.get("path")
+                .and_then(|v| v.as_str())
+                .unwrap_or("~/Desktop/developer");
+            let expanded = if dir.starts_with("~/") {
+                format!("{}{}", std::env::var("HOME").unwrap_or_default(), &dir[1..])
+            } else { dir.to_string() };
+            let result = probe::scan_directory(&expanded);
+            let count = result["repos_found"].as_u64().unwrap_or(0) as u32;
+            events::emit(&RuntimeEvent::DesktopScanCompleted {
+                path: expanded.clone(),
+                repos_found: count,
+            });
+            RpcResponse { id, result: Some(result), error: None }
+        }
+        "desktop.verify_binary" => {
+            let bin_path = req.params.get("path").and_then(|v| v.as_str()).unwrap_or("");
+            if bin_path.is_empty() {
+                RpcResponse { id, result: None, error: Some(RpcError { code: -32602, message: "path required".into() }) }
+            } else {
+                let expanded = if bin_path.starts_with("~/") {
+                    format!("{}{}", std::env::var("HOME").unwrap_or_default(), &bin_path[1..])
+                } else { bin_path.to_string() };
+                RpcResponse { id, result: Some(probe::verify_binary(&expanded)), error: None }
+            }
+        }
         _ => RpcResponse {
             id,
             result: None,

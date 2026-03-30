@@ -238,7 +238,165 @@ export function createMcpServer(config: ServiceConfig): McpServer {
     } catch (e) { return errorResult('Portfolio fetch failed', e); }
   });
 
-  // ── 20. health_check ─────────────────────────────────────────
+  // ── 20. pipeline_orchestrate ───────────────────────────────────
+  server.tool('pipeline_orchestrate', 'Run full Mermate pipeline step-by-step: render -> TLA+ -> TS -> Rust with Opseeq reviewing between stages', {
+    source: z.string().min(1).describe('Idea, markdown, or Mermaid source'),
+    inputMode: z.enum(['idea', 'markdown', 'mmd']).optional(),
+    maxMode: z.boolean().optional(),
+    includeTla: z.boolean().optional().default(true),
+    includeTs: z.boolean().optional().default(true),
+    includeRust: z.boolean().optional().default(false),
+  }, async ({ source, inputMode, maxMode, includeTla, includeTs, includeRust }) => {
+    const stages: Array<{ stage: string; duration_ms: number; success: boolean; validation?: unknown; error?: string }> = [];
+    const startAll = Date.now();
+    try {
+      const t0 = Date.now();
+      const renderResult = await requestJson<Record<string, unknown>>(`${MERMATE_URL}/api/render`, {
+        method: 'POST', body: JSON.stringify({ mermaid_source: source, input_mode: inputMode, max_mode: maxMode }),
+      });
+      const runId = (renderResult.run_id || renderResult.runId || '') as string;
+      stages.push({ stage: 'render', duration_ms: Date.now() - t0, success: true, validation: renderResult.validation });
+
+      if (includeTla && runId) {
+        const t1 = Date.now();
+        try {
+          const tlaResult = await requestJson<Record<string, unknown>>(`${MERMATE_URL}/api/render/tla`, {
+            method: 'POST', body: JSON.stringify({ run_id: runId }),
+          });
+          stages.push({ stage: 'tla', duration_ms: Date.now() - t1, success: true, validation: tlaResult.validation });
+        } catch (e) { stages.push({ stage: 'tla', duration_ms: Date.now() - t1, success: false, error: e instanceof Error ? e.message : String(e) }); }
+      }
+
+      if (includeTs && runId) {
+        const t2 = Date.now();
+        try {
+          const tsResult = await requestJson<Record<string, unknown>>(`${MERMATE_URL}/api/render/ts`, {
+            method: 'POST', body: JSON.stringify({ run_id: runId }),
+          });
+          stages.push({ stage: 'ts', duration_ms: Date.now() - t2, success: (tsResult.validation as Record<string, unknown>)?.success !== false, validation: tsResult.validation });
+        } catch (e) { stages.push({ stage: 'ts', duration_ms: Date.now() - t2, success: false, error: e instanceof Error ? e.message : String(e) }); }
+      }
+
+      if (includeRust && runId) {
+        const t3 = Date.now();
+        try {
+          const rustResult = await requestJson<Record<string, unknown>>(`${MERMATE_URL}/api/render/rust`, {
+            method: 'POST', body: JSON.stringify({ run_id: runId }),
+          });
+          stages.push({ stage: 'rust', duration_ms: Date.now() - t3, success: true, validation: rustResult.rust_metrics });
+        } catch (e) { stages.push({ stage: 'rust', duration_ms: Date.now() - t3, success: false, error: e instanceof Error ? e.message : String(e) }); }
+      }
+
+      return jsonResult({
+        purpose: 'mermate_full_pipeline',
+        run_id: runId,
+        total_duration_ms: Date.now() - startAll,
+        stages_completed: stages.filter(s => s.success).length,
+        stages_failed: stages.filter(s => !s.success).length,
+        stages,
+      });
+    } catch (e) {
+      return errorResult('Pipeline orchestration failed at render stage', e);
+    }
+  });
+
+  // ── 21. desktop_scan ─────────────────────────────────────────
+  server.tool('desktop_scan', 'Scan a directory (default ~/Desktop/developer/) for repos and their Opseeq connection status', {
+    path: z.string().optional().describe('Directory to scan (default: ~/Desktop/developer/)'),
+  }, async ({ path: scanPath }) => {
+    const dir = scanPath || `${process.env.HOME || '/tmp'}/Desktop/developer`;
+    try {
+      const fs = await import('node:fs');
+      const pathMod = await import('node:path');
+      const entries = fs.readdirSync(dir, { withFileTypes: true });
+      const repos = entries
+        .filter(e => e.isDirectory() && !e.name.startsWith('.') && e.name !== 'node_modules')
+        .map(e => {
+          const p = pathMod.join(dir, e.name);
+          const hasPkg = fs.existsSync(pathMod.join(p, 'package.json'));
+          const hasCargo = fs.existsSync(pathMod.join(p, 'Cargo.toml'));
+          const hasEnv = fs.existsSync(pathMod.join(p, '.env'));
+          const hasMcp = fs.existsSync(pathMod.join(p, '.mcp.json'));
+          let opseeqConnected = false;
+          if (hasEnv) {
+            try {
+              const envContent = fs.readFileSync(pathMod.join(p, '.env'), 'utf8');
+              opseeqConnected = envContent.includes('OPSEEQ_URL') || envContent.includes('OPENAI_BASE_URL');
+            } catch {}
+          }
+          return { name: e.name, path: p, has_package_json: hasPkg, has_cargo_toml: hasCargo, has_env: hasEnv, has_mcp_json: hasMcp, opseeq_connected: opseeqConnected };
+        });
+      return jsonResult({ path: dir, repos_found: repos.length, repos });
+    } catch (e) { return errorResult(`Scan failed for ${dir}`, e); }
+  });
+
+  // ── 22. repo_organize ────────────────────────────────────────
+  server.tool('repo_organize', 'Verify and clean up a Mermate-built repo: check structure, generate missing .env/.mcp.json for Opseeq', {
+    repo_path: z.string().min(1).describe('Absolute path to the repo'),
+  }, async ({ repo_path }) => {
+    try {
+      const fs = await import('node:fs');
+      const pathMod = await import('node:path');
+      const checks: Array<{ item: string; status: string; action?: string }> = [];
+
+      const hasPkg = fs.existsSync(pathMod.join(repo_path, 'package.json'));
+      const hasCargo = fs.existsSync(pathMod.join(repo_path, 'Cargo.toml'));
+      checks.push({ item: 'project_file', status: hasPkg || hasCargo ? 'found' : 'missing' });
+
+      for (const f of ['README.md', 'run.sh']) {
+        checks.push({ item: f, status: fs.existsSync(pathMod.join(repo_path, f)) ? 'found' : 'missing' });
+      }
+
+      const envPath = pathMod.join(repo_path, '.env');
+      if (!fs.existsSync(envPath)) {
+        fs.writeFileSync(envPath, `# Opseeq connection\nOPENAI_BASE_URL=http://localhost:9090/v1\nOPSEEQ_URL=http://localhost:9090\n`);
+        checks.push({ item: '.env', status: 'created', action: 'Generated with Opseeq connection vars' });
+      } else {
+        const content = fs.readFileSync(envPath, 'utf8');
+        if (!content.includes('OPSEEQ_URL')) {
+          fs.appendFileSync(envPath, `\n# Opseeq connection\nOPSEEQ_URL=http://localhost:9090\n`);
+          checks.push({ item: '.env', status: 'updated', action: 'Appended OPSEEQ_URL' });
+        } else {
+          checks.push({ item: '.env', status: 'found' });
+        }
+      }
+
+      const mcpPath = pathMod.join(repo_path, '.mcp.json');
+      if (!fs.existsSync(mcpPath)) {
+        fs.writeFileSync(mcpPath, JSON.stringify({ mcpServers: { opseeq: { url: 'http://localhost:9090/mcp' } } }, null, 2) + '\n');
+        checks.push({ item: '.mcp.json', status: 'created', action: 'Generated for Opseeq MCP' });
+      } else {
+        checks.push({ item: '.mcp.json', status: 'found' });
+      }
+
+      if (hasCargo) {
+        const binDir = pathMod.join(repo_path, 'target', 'release');
+        checks.push({ item: 'rust_binary', status: fs.existsSync(binDir) ? 'found' : 'not_built' });
+      }
+
+      return jsonResult({ repo_path, checks });
+    } catch (e) { return errorResult('Repo organize failed', e); }
+  });
+
+  // ── 23. artifact_verify ──────────────────────────────────────
+  server.tool('artifact_verify', 'Verify pipeline artifacts for a Mermate run at a specific stage', {
+    run_id: z.string().min(1).describe('Mermate run ID'),
+    stage: z.enum(['render', 'tla', 'ts', 'rust']).describe('Pipeline stage to verify'),
+  }, async ({ run_id, stage }) => {
+    try {
+      if (stage === 'tla') {
+        const result = await requestJson(`${MERMATE_URL}/api/render/tla/status`);
+        return jsonResult({ run_id, stage, verification: result });
+      } else if (stage === 'ts') {
+        const result = await requestJson(`${MERMATE_URL}/api/render/ts/status`);
+        return jsonResult({ run_id, stage, verification: result });
+      } else {
+        return jsonResult({ run_id, stage, verification: { note: `${stage} verification requires run artifacts on disk` } });
+      }
+    } catch (e) { return errorResult(`Artifact verification failed for ${stage}`, e); }
+  });
+
+  // ── 24. health_check ─────────────────────────────────────────
   server.tool('health_check', 'Check health of all configured providers', {}, async () => {
     const providerStatus = await Promise.all(config.providers.map(async (p) => {
       try {

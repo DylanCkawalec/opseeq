@@ -36,6 +36,18 @@ pub enum RuntimeEvent {
     KernelStopped {
         reason: String,
     },
+    PipelineStageCompleted {
+        trace_id: String,
+        run_id: String,
+        stage: String,
+        duration_ms: u64,
+        validation_passed: Option<bool>,
+        purpose: Option<String>,
+    },
+    DesktopScanCompleted {
+        path: String,
+        repos_found: u32,
+    },
 }
 
 static EVENTS_ENABLED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
