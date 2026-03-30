@@ -33,6 +33,7 @@ vdr-notes/
 .direnv/
 .env
 .env.*
+!.env.example
 .envrc
 .netrc
 .npmrc

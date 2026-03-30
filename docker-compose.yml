@@ -1,0 +1,74 @@
+# Opseeq AI Agent Gateway — Docker Compose
+#
+# Usage:
+#   docker compose up -d          # Start the service
+#   docker compose logs -f        # Watch logs
+#   docker compose down           # Stop
+#
+# The service exposes:
+#   - http://localhost:9090/v1/chat/completions  (OpenAI-compatible)
+#   - http://localhost:9090/v1/models            (model listing)
+#   - http://localhost:9090/v1/embeddings        (embedding passthrough)
+#   - http://localhost:9090/mcp                  (MCP SSE for agentic tools)
+#   - http://localhost:9090/health               (health check)
+
+services:
+  opseeq:
+    build:
+      context: .
+      dockerfile: Dockerfile.service
+      tags:
+        - dylanckawalec/opseeq:latest
+        - opseeq:latest
+    image: dylanckawalec/opseeq:latest
+    container_name: opseeq
+    ports:
+      - "${OPSEEQ_PORT:-9090}:9090"
+    env_file:
+      - .env
+    environment:
+      - OPSEEQ_HOST=0.0.0.0
+      - NODE_ENV=production
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9090/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "5"
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 128M
+
+  # Optional: Local NIM instance (requires NVIDIA GPU)
+  # Uncomment to run NVIDIA NIM locally alongside the gateway
+  #
+  # nim:
+  #   image: nvcr.io/nim/meta/llama-3.3-70b-instruct:latest
+  #   container_name: opseeq-nim
+  #   runtime: nvidia
+  #   environment:
+  #     - NGC_API_KEY=${NVIDIA_API_KEY}
+  #   ports:
+  #     - "8000:8000"
+  #   deploy:
+  #     resources:
+  #       reservations:
+  #         devices:
+  #           - driver: nvidia
+  #             count: all
+  #             capabilities: [gpu]
+  #   healthcheck:
+  #     test: ["CMD", "curl", "-f", "http://localhost:8000/v1/health/ready"]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 5
+  #     start_period: 120s

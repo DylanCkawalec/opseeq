@@ -1,6 +1,12 @@
 node_modules
+service/node_modules
 /dist
 .git
 *.pyc
 __pycache__
 .pytest_cache
+.env
+.env.*
+coverage/
+docs/_build/
+test/
