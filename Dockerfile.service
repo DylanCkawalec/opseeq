@@ -5,8 +5,8 @@
 # Build:  docker build -f Dockerfile.service -t opseeq:latest .
 # Run:    docker run -p 9090:9090 --env-file .env opseeq:latest
 
-# Stage 1: Build TypeScript service
-FROM node:22-slim AS builder
+# Stage 1: Build TypeScript and install production deps only
+FROM node:22-alpine AS builder
 
 WORKDIR /build
 COPY service/package.json service/package-lock.json* ./
@@ -14,17 +14,12 @@ RUN npm install
 
 COPY service/tsconfig.json ./
 COPY service/src/ ./src/
-RUN npm run build
+RUN npm run build && rm -rf src/ tsconfig.json && npm prune --production
 
-# Stage 2: Runtime
-FROM node:22-slim AS runtime
+# Stage 2: Runtime (Alpine — minimal footprint)
+FROM node:22-alpine AS runtime
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-        curl=7.88.1-10+deb12u14 \
-        ca-certificates=20230311+deb12u1 \
-    && rm -rf /var/lib/apt/lists/*
-
-RUN groupadd -r opseeq && useradd -r -g opseeq -d /app -s /usr/sbin/nologin opseeq
+RUN apk add --no-cache curl ca-certificates && adduser -D -h /app opseeq
 
 WORKDIR /app
 
