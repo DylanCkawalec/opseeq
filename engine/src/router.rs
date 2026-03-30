@@ -36,6 +36,7 @@ pub async fn route_inference(
         trace_id: trace_id.to_string(),
         model: req.model.clone(),
         provider: provider.name.clone(),
+        purpose: req.purpose.clone(),
     });
 
     let max_retries = 2u32;
@@ -59,6 +60,7 @@ pub async fn route_inference(
                     provider: provider.name.clone(),
                     latency_ms: start.elapsed().as_millis() as u64,
                     tokens,
+                    purpose: req.purpose.clone(),
                 });
 
                 return Ok(resp);

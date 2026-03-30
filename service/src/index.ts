@@ -488,11 +488,27 @@ app.get('/api/architect/status', authenticate, async (_req, res) => {
 });
 
 app.post('/api/architect/pipeline', authenticate, async (req, res) => {
+  const pipelineStart = Date.now();
+  const reqId = (req as any).id || '';
   try {
     const ctrl = new AbortController(); const timer = setTimeout(() => ctrl.abort(), 120_000);
     const up = await fetch(`${MERMATE_URL}/api/render`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(req.body), signal: ctrl.signal });
-    clearTimeout(timer); res.status(up.status).json(await up.json());
-  } catch (err) { res.status(502).json({ error: `Mermate pipeline unreachable: ${err instanceof Error ? err.message : err}` }); }
+    clearTimeout(timer);
+    const data = await up.json() as Record<string, unknown>;
+    const durationMs = Date.now() - pipelineStart;
+    log('info', 'mermate_pipeline_completed', {
+      trace_id: reqId, purpose: 'mermate_pipeline',
+      duration_ms: durationMs, http_status: up.status,
+      run_id: data.run_id ?? data.runId ?? null,
+      diagram_type: data.diagram_type ?? data.diagramType ?? null,
+      stage: data.stage ?? null,
+      validation_passed: data.validation_passed ?? data.validationPassed ?? null,
+    });
+    res.status(up.status).json(data);
+  } catch (err) {
+    log('error', 'mermate_pipeline_failed', { trace_id: reqId, purpose: 'mermate_pipeline', duration_ms: Date.now() - pipelineStart, error: err instanceof Error ? err.message : String(err) });
+    res.status(502).json({ error: `Mermate pipeline unreachable: ${err instanceof Error ? err.message : err}` });
+  }
 });
 
 app.post('/api/builder/scaffold', authenticate, async (req, res) => {

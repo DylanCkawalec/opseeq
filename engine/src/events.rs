@@ -7,6 +7,7 @@ pub enum RuntimeEvent {
         trace_id: String,
         model: String,
         provider: String,
+        purpose: Option<String>,
     },
     InferenceCompleted {
         trace_id: String,
@@ -14,6 +15,7 @@ pub enum RuntimeEvent {
         provider: String,
         latency_ms: u64,
         tokens: Option<u32>,
+        purpose: Option<String>,
     },
     ProviderFailed {
         trace_id: String,

@@ -28,7 +28,7 @@ function errorResult(msg: string, err: unknown) {
 }
 
 export function createMcpServer(config: ServiceConfig): McpServer {
-  const server = new McpServer({ name: 'opseeq', version: '2.0.0' });
+  const server = new McpServer({ name: 'opseeq', version: '3.0.0' });
 
   // ── 1. opseeq_status ─────────────────────────────────────────
   server.tool('opseeq_status', 'Full gateway status: providers, models, Mermate, Synth, Ollama, MCP, connectivity', {}, async () => {
@@ -177,7 +177,68 @@ export function createMcpServer(config: ServiceConfig): McpServer {
     } catch (e) { return errorResult('TypeScript generation failed', e); }
   });
 
-  // ── 15. health_check ──────────────────────────────────────────
+  // ── 15. synth_status ──────────────────────────────────────────
+  server.tool('synth_status', 'Deep status of the Synth prediction/trading desk: simulation mode, approval state, AI availability, predictions, opseeq connectivity', {}, async () => {
+    try {
+      const data = await requestJson<Record<string, unknown>>(`${SYNTH_URL}/api/health`, {});
+      return jsonResult({
+        purpose: 'synth_trading_desk',
+        baseUrl: SYNTH_URL,
+        status: (data as { status?: string }).status,
+        simulationMode: (data as { simulation_mode?: boolean }).simulation_mode,
+        approvalRequired: (data as { approval_required?: boolean }).approval_required,
+        aiAvailable: (data as { ai_engine_available?: boolean }).ai_engine_available,
+        predictions: (data as { predictions?: number }).predictions,
+        opseeq: (data as { opseeq?: unknown }).opseeq,
+      });
+    } catch (e) { return errorResult(`Synth unavailable at ${SYNTH_URL}`, e); }
+  });
+
+  // ── 16. synth_predict ────────────────────────────────────────
+  server.tool('synth_predict', 'Generate a market prediction through the Synth prediction engine', {
+    query: z.string().min(1).describe('Market question or prediction query'),
+    wallet_id: z.string().optional().describe('Wallet ID for portfolio context'),
+  }, async ({ query, wallet_id }) => {
+    try {
+      return jsonResult(await requestJson(`${SYNTH_URL}/api/predictions/generate`, {
+        method: 'POST',
+        body: JSON.stringify({ query, wallet_id }),
+      }));
+    } catch (e) { return errorResult('Synth prediction failed', e); }
+  });
+
+  // ── 17. synth_predictions ────────────────────────────────────
+  server.tool('synth_predictions', 'List recent predictions from the Synth desk', {
+    limit: z.number().optional().describe('Max predictions to return'),
+  }, async ({ limit }) => {
+    try {
+      const url = limit ? `${SYNTH_URL}/api/predictions/history?limit=${limit}` : `${SYNTH_URL}/api/predictions/history`;
+      return jsonResult(await requestJson(url));
+    } catch (e) { return errorResult('Failed to fetch predictions', e); }
+  });
+
+  // ── 18. synth_markets ────────────────────────────────────────
+  server.tool('synth_markets', 'Search available prediction markets through the Synth desk', {
+    query: z.string().min(1).describe('Market search query'),
+    limit: z.number().optional().describe('Max results'),
+  }, async ({ query, limit }) => {
+    try {
+      const url = `${SYNTH_URL}/api/markets/search/${encodeURIComponent(query)}${limit ? `?limit=${limit}` : ''}`;
+      return jsonResult(await requestJson(url));
+    } catch (e) { return errorResult('Market search failed', e); }
+  });
+
+  // ── 19. synth_portfolio ──────────────────────────────────────
+  server.tool('synth_portfolio', 'Get portfolio summary from the Synth trading desk', {
+    wallet_id: z.string().optional().describe('Wallet ID'),
+  }, async ({ wallet_id }) => {
+    try {
+      const url = wallet_id ? `${SYNTH_URL}/api/portfolio/summary?wallet_id=${wallet_id}` : `${SYNTH_URL}/api/portfolio/summary`;
+      return jsonResult(await requestJson(url));
+    } catch (e) { return errorResult('Portfolio fetch failed', e); }
+  });
+
+  // ── 20. health_check ─────────────────────────────────────────
   server.tool('health_check', 'Check health of all configured providers', {}, async () => {
     const providerStatus = await Promise.all(config.providers.map(async (p) => {
       try {

@@ -165,6 +165,22 @@ async fn dispatch(client: &reqwest::Client, config: &KernelConfig, req: &RpcRequ
                 error: None,
             }
         }
+        "synth.status" => {
+            let result = probe::probe_synth_deep(client, &config.synth_url).await;
+            RpcResponse { id, result: Some(result), error: None }
+        }
+        "synth.predict" => {
+            let query = req.params.get("query").and_then(|v| v.as_str()).unwrap_or("");
+            let wallet_id = req.params.get("wallet_id").and_then(|v| v.as_str());
+            if query.is_empty() {
+                RpcResponse { id, result: None, error: Some(RpcError { code: -32602, message: "query required".into() }) }
+            } else {
+                match probe::synth_predict(client, &config.synth_url, query, wallet_id).await {
+                    Ok(data) => RpcResponse { id, result: Some(data), error: None },
+                    Err(e) => RpcResponse { id, result: None, error: Some(RpcError { code: -32000, message: e }) },
+                }
+            }
+        }
         "connectivity.probe" => {
             let mermate_health = format!("{}/api/copilot/health", config.mermate_url);
             let synth_health = format!("{}/api/health", config.synth_url);

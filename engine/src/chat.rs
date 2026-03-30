@@ -66,6 +66,7 @@ pub async fn run_chat(config: KernelConfig) {
             temperature: Some(0.0),
             max_tokens: None,
             stream: false,
+            purpose: Some("hitl_chat".into()),
         };
 
         let trace_id = uuid::Uuid::new_v4().to_string()[..12].to_string();
@@ -189,26 +190,145 @@ async fn handle_slash(
         }
 
         "/mermate" => {
-            if arg.is_empty() {
-                let r = probe::probe_mermate(client, &config.mermate_url).await;
-                println!("  Mermate: {} ({}ms)", if r.reachable { "online" } else { "offline" }, r.latency_ms);
-            } else {
-                println!("  Sending to Mermate render...");
-                let url = format!("{}/api/render", config.mermate_url);
-                let body = serde_json::json!({ "prompt": arg, "mode": "mermaid" });
-                match client.post(&url).json(&body).timeout(std::time::Duration::from_secs(60)).send().await {
-                    Ok(resp) => {
-                        let text = resp.text().await.unwrap_or_default();
-                        println!("{text}");
+            let subcmd_parts: Vec<&str> = arg.splitn(2, ' ').collect();
+            let subcmd = subcmd_parts[0];
+            let subarg = subcmd_parts.get(1).unwrap_or(&"").trim();
+
+            match subcmd {
+                "" => {
+                    let r = probe::probe_mermate(client, &config.mermate_url).await;
+                    println!("  Mermate: {} ({}ms)", if r.reachable { "online" } else { "offline" }, r.latency_ms);
+                    if r.reachable {
+                        let agents_url = format!("{}/api/agents", config.mermate_url);
+                        if let Ok(resp) = client.get(&agents_url).timeout(std::time::Duration::from_secs(3)).send().await {
+                            if let Ok(data) = resp.json::<serde_json::Value>().await {
+                                let count = data["agents"].as_array().map(|a| a.len()).unwrap_or(0);
+                                println!("  Agents:  {count} loaded");
+                            }
+                        }
+                        for (label, path) in [("TLA+", "/api/render/tla/status"), ("TS", "/api/render/ts/status")] {
+                            let url = format!("{}{}", config.mermate_url, path);
+                            if let Ok(resp) = client.get(&url).timeout(std::time::Duration::from_secs(2)).send().await {
+                                if let Ok(data) = resp.json::<serde_json::Value>().await {
+                                    let avail = data["available"].as_bool().unwrap_or(false);
+                                    println!("  {label:6} {}", if avail { "available" } else { "unavailable" });
+                                }
+                            }
+                        }
                     }
-                    Err(e) => println!("  Error: {e}"),
                 }
+                "render" => {
+                    if subarg.is_empty() { println!("  Usage: /mermate render <text>"); }
+                    else {
+                        println!("  Sending to Mermate render...");
+                        let url = format!("{}/api/render", config.mermate_url);
+                        let body = serde_json::json!({ "prompt": subarg, "mode": "mermaid" });
+                        match client.post(&url).json(&body).timeout(std::time::Duration::from_secs(60)).send().await {
+                            Ok(resp) => println!("{}", resp.text().await.unwrap_or_default()),
+                            Err(e) => println!("  Error: {e}"),
+                        }
+                    }
+                }
+                "tla" => {
+                    if subarg.is_empty() { println!("  Usage: /mermate tla <runId>"); }
+                    else {
+                        let url = format!("{}/api/render/tla", config.mermate_url);
+                        let body = serde_json::json!({ "run_id": subarg });
+                        match client.post(&url).json(&body).timeout(std::time::Duration::from_secs(60)).send().await {
+                            Ok(resp) => println!("{}", resp.text().await.unwrap_or_default()),
+                            Err(e) => println!("  Error: {e}"),
+                        }
+                    }
+                }
+                "ts" => {
+                    if subarg.is_empty() { println!("  Usage: /mermate ts <runId>"); }
+                    else {
+                        let url = format!("{}/api/render/ts", config.mermate_url);
+                        let body = serde_json::json!({ "run_id": subarg });
+                        match client.post(&url).json(&body).timeout(std::time::Duration::from_secs(60)).send().await {
+                            Ok(resp) => println!("{}", resp.text().await.unwrap_or_default()),
+                            Err(e) => println!("  Error: {e}"),
+                        }
+                    }
+                }
+                "agents" => {
+                    let url = format!("{}/api/agent/modes", config.mermate_url);
+                    match client.get(&url).timeout(std::time::Duration::from_secs(5)).send().await {
+                        Ok(resp) => {
+                            if let Ok(data) = resp.json::<serde_json::Value>().await {
+                                if let Some(modes) = data["modes"].as_array() {
+                                    for m in modes {
+                                        println!("  {} — {} [{}]",
+                                            m["id"].as_str().unwrap_or("?"),
+                                            m["label"].as_str().unwrap_or(""),
+                                            m["stage"].as_str().unwrap_or(""),
+                                        );
+                                    }
+                                }
+                            }
+                        }
+                        Err(e) => println!("  Error: {e}"),
+                    }
+                }
+                _ => println!("  /mermate [render|tla|ts|agents] or bare for status"),
             }
         }
 
         "/synth" => {
-            let r = probe::probe_synth(client, &config.synth_url).await;
-            println!("  Synth: {} ({}ms)", if r.reachable { "online" } else { "offline" }, r.latency_ms);
+            let subcmd_parts: Vec<&str> = arg.splitn(2, ' ').collect();
+            let subcmd = subcmd_parts[0];
+            let subarg = subcmd_parts.get(1).unwrap_or(&"").trim();
+
+            match subcmd {
+                "" => {
+                    let data = probe::probe_synth_deep(client, &config.synth_url).await;
+                    println!("  Synth Trading Desk");
+                    println!("  reachable:    {}", data["reachable"].as_bool().unwrap_or(false));
+                    println!("  simulation:   {}", data["simulation_mode"]);
+                    println!("  approval:     {}", data["approval_required"]);
+                    println!("  ai_engine:    {}", data["ai_engine_available"]);
+                    println!("  predictions:  {}", data["predictions"]);
+                    if let Some(o) = data.get("opseeq") {
+                        println!("  opseeq link:  {}", o);
+                    }
+                }
+                "predict" => {
+                    if subarg.is_empty() { println!("  Usage: /synth predict <market question>"); }
+                    else {
+                        println!("  Generating prediction...");
+                        match probe::synth_predict(client, &config.synth_url, subarg, None).await {
+                            Ok(data) => {
+                                if let Some(p) = data.get("prediction") {
+                                    println!("  Thesis:     {}", p["thesis"].as_str().unwrap_or("?"));
+                                    println!("  Confidence: {}", p["confidence"]);
+                                    println!("  Action:     {}", p.get("suggested_execution").and_then(|e| e.get("action")).unwrap_or(&serde_json::Value::Null));
+                                } else {
+                                    println!("{}", serde_json::to_string_pretty(&data).unwrap_or_default());
+                                }
+                            }
+                            Err(e) => println!("  Error: {e}"),
+                        }
+                    }
+                }
+                "history" => {
+                    let url = format!("{}/api/predictions/history?limit=5", config.synth_url);
+                    match client.get(&url).timeout(std::time::Duration::from_secs(5)).send().await {
+                        Ok(resp) => println!("{}", resp.text().await.unwrap_or_default()),
+                        Err(e) => println!("  Error: {e}"),
+                    }
+                }
+                "markets" => {
+                    if subarg.is_empty() { println!("  Usage: /synth markets <query>"); }
+                    else {
+                        let url = format!("{}/api/markets/search/{}", config.synth_url, subarg);
+                        match client.get(&url).timeout(std::time::Duration::from_secs(10)).send().await {
+                            Ok(resp) => println!("{}", resp.text().await.unwrap_or_default()),
+                            Err(e) => println!("  Error: {e}"),
+                        }
+                    }
+                }
+                _ => println!("  /synth [predict|history|markets] or bare for status"),
+            }
         }
 
         "/clear" => {
@@ -217,15 +337,22 @@ async fn handle_slash(
         }
 
         "/help" => {
-            println!("  /model <name>    Switch model");
-            println!("  /models          List all models");
-            println!("  /provider <name> Force provider (or 'auto')");
-            println!("  /status          System health");
-            println!("  /ollama          Ollama models");
-            println!("  /mermate [text]  Probe or render");
-            println!("  /synth           Synth status");
-            println!("  /clear           Clear history");
-            println!("  /quit            Exit");
+            println!("  /model <name>       Switch model");
+            println!("  /models             List all models");
+            println!("  /provider <name>    Force provider (or 'auto')");
+            println!("  /status             System health");
+            println!("  /ollama             Ollama models");
+            println!("  /mermate            Deep Mermate status");
+            println!("  /mermate render <t> Render through pipeline");
+            println!("  /mermate tla <id>   Generate TLA+ for run");
+            println!("  /mermate ts <id>    Generate TypeScript for run");
+            println!("  /mermate agents     List agent modes");
+            println!("  /synth              Deep Synth status");
+            println!("  /synth predict <q>  Generate prediction");
+            println!("  /synth history      Recent predictions");
+            println!("  /synth markets <q>  Search markets");
+            println!("  /clear              Clear history");
+            println!("  /quit               Exit");
         }
 
         _ => {
