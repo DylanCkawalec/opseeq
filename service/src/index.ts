@@ -419,7 +419,7 @@ app.post('/api/chat', authenticate, async (req, res) => {
 
     if (transport === 'ollama') {
       const result = await chatWithOllama(messages, reqModel);
-      res.status(result.ok ? 200 : 502).json(result.ok ? result.payload : result.payload);
+      res.status(result.ok ? 200 : 502).json(result);
       return;
     }
 
