@@ -341,10 +341,10 @@ app.post('/v1/chat/completions', authenticate, async (req, res) => {
         const reader = stream.getReader(); const dec = new TextDecoder();
         const pump = async (): Promise<void> => { const { done, value } = await reader.read(); if (done) { res.end(); return; } res.write(dec.decode(value, { stream: true })); return pump(); };
         await pump();
-      } catch { const fb = await routeInference({ ...body, stream: false }, config); res.json(fb); }
+      } catch { const fb = await routeInference({ ...body, stream: false }, config, (req as any).id); res.json(fb); }
       return;
     }
-    res.json(await routeInference(body, config));
+    res.json(await routeInference(body, config, (req as any).id));
   } catch (err) {
     res.status(502).json({ error: { message: err instanceof Error ? err.message : 'upstream error', type: 'upstream_error' } });
   }
@@ -426,7 +426,7 @@ app.post('/api/chat', authenticate, async (req, res) => {
     }
 
     const model = reqModel || config.defaultModel;
-    const result = await routeInference({ model, messages, temperature: 0 }, config);
+    const result = await routeInference({ model, messages, temperature: 0 }, config, (req as any).id);
     const content = result.choices?.[0]?.message?.content || '';
     res.json({
       ok: true,

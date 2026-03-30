@@ -1,4 +1,5 @@
 use crate::config::KernelConfig;
+use crate::events::{self, RuntimeEvent};
 use crate::probe;
 use crate::providers::ollama;
 use crate::router;
@@ -41,6 +42,11 @@ pub async fn run_rpc_server(config: KernelConfig) {
     let mut reader = BufReader::new(stdin);
     let mut line = String::new();
 
+    events::emit(&RuntimeEvent::KernelStarted {
+        version: "0.1.0".into(),
+        providers: config.providers.iter().map(|p| p.name.clone()).collect(),
+        mode: "serve".into(),
+    });
     eprintln!("[opseeq-core] RPC server ready (stdin/stdout)");
 
     loop {
@@ -103,7 +109,11 @@ async fn dispatch(client: &reqwest::Client, config: &KernelConfig, req: &RpcRequ
                     };
                 }
             };
-            let trace_id = uuid::Uuid::new_v4().to_string()[..12].to_string();
+            let trace_id = req.params.get("trace_id")
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.is_empty())
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| uuid::Uuid::new_v4().to_string()[..12].to_string());
             match router::route_inference(client, config, &chat_req, &trace_id).await {
                 Ok(resp) => RpcResponse {
                     id,

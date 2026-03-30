@@ -16,6 +16,9 @@ pub struct KernelConfig {
     pub mermate_url: String,
     pub synth_url: String,
     pub ollama_url: String,
+    pub tau_explore: f64,
+    pub tau_production: f64,
+    pub tau_deploy: f64,
 }
 
 fn env_or(key: &str, default: &str) -> String {
@@ -122,5 +125,8 @@ pub fn load_config() -> KernelConfig {
             .trim_end_matches('/')
             .to_string(),
         ollama_url,
+        tau_explore: env_or("OPSEEQ_TAU_EXPLORE", "0.7").parse().unwrap_or(0.7),
+        tau_production: env_or("OPSEEQ_TAU_PRODUCTION", "0.85").parse().unwrap_or(0.85),
+        tau_deploy: env_or("OPSEEQ_TAU_DEPLOY", "0.9").parse().unwrap_or(0.9),
     }
 }

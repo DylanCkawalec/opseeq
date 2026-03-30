@@ -163,16 +163,19 @@ async function callOllamaProvider(
     throw new Error(`Ollama ${res.status}: ${errText}`);
   }
 
-  const data = await res.json() as { message?: { content: string }; eval_count?: number; prompt_eval_count?: number };
+  const data = await res.json() as { model?: string; message?: { content: string; thinking?: string; role?: string }; eval_count?: number; prompt_eval_count?: number };
+
+  const msg: ChatMessage = { role: 'assistant', content: data.message?.content || '' };
+  if (data.message?.thinking) Object.assign(msg, { reasoning: data.message.thinking });
 
   return {
     id: `chatcmpl-${Date.now()}`,
     object: 'chat.completion',
     created: Math.floor(Date.now() / 1000),
-    model: req.model,
+    model: data.model || req.model,
     choices: [{
       index: 0,
-      message: { role: 'assistant', content: data.message?.content || '' },
+      message: msg,
       finish_reason: 'stop',
     }],
     usage: {
@@ -233,6 +236,7 @@ async function callOpenAICompatibleStream(
 export async function routeInference(
   req: ChatCompletionRequest,
   config: ServiceConfig,
+  traceId?: string,
 ): Promise<ChatCompletionResponse> {
   if (_kernel?.isReady()) {
     try {
@@ -242,6 +246,7 @@ export async function routeInference(
         temperature: req.temperature,
         max_tokens: req.max_tokens || req.max_completion_tokens,
         stream: false,
+        trace_id: traceId,
       }) as ChatCompletionResponse;
       return result;
     } catch (err) {

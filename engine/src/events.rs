@@ -1,8 +1,5 @@
 use serde::{Deserialize, Serialize};
 
-/// Phase 2 stub: typed runtime events.
-/// In Phase 1 these are defined but not emitted.
-/// Phase 2 will emit these on every major kernel operation.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum RuntimeEvent {
@@ -37,4 +34,19 @@ pub enum RuntimeEvent {
     KernelStopped {
         reason: String,
     },
+}
+
+static EVENTS_ENABLED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+
+fn events_enabled() -> bool {
+    *EVENTS_ENABLED.get_or_init(|| {
+        std::env::var("OPSEEQ_KERNEL_EVENTS").map(|v| v == "1" || v == "true").unwrap_or(true)
+    })
+}
+
+pub fn emit(event: &RuntimeEvent) {
+    if !events_enabled() { return; }
+    if let Ok(json) = serde_json::to_string(event) {
+        eprintln!("[event] {json}");
+    }
 }
