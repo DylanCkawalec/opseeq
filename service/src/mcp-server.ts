@@ -155,6 +155,45 @@ export function createMcpServer(config: ServiceConfig): McpServer {
     },
   );
 
+  server.tool(
+    'mermate_guide',
+    'Evaluate Mermate UI state and suggest the next best action for the user. Returns a JSON array of highlight targets, hints, and priority weights for the Mermate auto-guide overlay.',
+    {
+      current_mode: zStr().describe('Active tab: idea, md, mmd, tla, or ts'),
+      is_loading: zBool().optional().describe('Whether a render is in progress'),
+      agent_state: zStr().optional().describe('Agent state: idle, running, awaiting_notes, finalizing'),
+      agent_mode_active: zBool().optional().describe('Whether an agent mode is selected'),
+      has_input: zBool().describe('Whether the textarea has content'),
+      has_name: zBool().optional().describe('Whether the diagram name field has content'),
+      has_result: zBool().optional().describe('Whether a diagram has been rendered'),
+      enhance_checked: zBool().optional().describe('Whether the Enhance toggle is on'),
+      unlocked_stages: zArr(zStr()).optional().describe('Array of unlocked pipeline stages'),
+      completed_stages: zArr(zStr()).optional().describe('Array of completed pipeline stages'),
+      error_visible: zBool().optional().describe('Whether an error banner is showing'),
+    },
+    async (state) => {
+      const guidePrompt = `You are the Mermate Auto Guide. Given this UI state, return a JSON array of 1-3 actions: [{"target":"<CSS selector>","hint":"<60 char max>","weight":<20-100>}]. If loading/agent running, return [{"target":null,"hint":"","weight":0,"pause":true}]. JSON only.`;
+
+      const stateStr = JSON.stringify(state);
+
+      const result = await routeInference({
+        model: config.defaultModel,
+        messages: [
+          { role: 'system', content: guidePrompt },
+          { role: 'user', content: stateStr },
+        ],
+        temperature: 0,
+        max_tokens: 250,
+      }, config);
+
+      const content = result.choices?.[0]?.message?.content || '[]';
+
+      return {
+        content: [{ type: 'text' as const, text: content }],
+      };
+    },
+  );
+
   return server;
 }
 

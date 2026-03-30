@@ -80,12 +80,15 @@ export function loadConfig(): ServiceConfig {
   const apiKeysRaw = process.env.OPSEEQ_API_KEYS || process.env.OPSEEQ_API_KEY || '';
   const apiKeys = apiKeysRaw ? apiKeysRaw.split(',').map(k => k.trim()).filter(Boolean) : [];
 
+  const providers = parseProviders();
+  const hasNvidia = providers.some(p => p.name.includes('nim'));
+
   return {
     port: parseInt(process.env.OPSEEQ_PORT || process.env.PORT || '9090', 10),
     host: process.env.OPSEEQ_HOST || '0.0.0.0',
     apiKeys,
-    providers: parseProviders(),
-    defaultModel: process.env.OPSEEQ_DEFAULT_MODEL || 'nvidia/nemotron-3-super-120b-a12b',
+    providers,
+    defaultModel: process.env.OPSEEQ_DEFAULT_MODEL || (hasNvidia ? 'nvidia/nemotron-3-super-120b-a12b' : 'gpt-4o'),
     mcpEnabled: process.env.OPSEEQ_MCP_ENABLED !== 'false',
     serverlessMode: process.env.OPSEEQ_SERVERLESS === 'true',
     idleTimeoutMs: parseInt(process.env.OPSEEQ_IDLE_TIMEOUT_MS || '300000', 10),
