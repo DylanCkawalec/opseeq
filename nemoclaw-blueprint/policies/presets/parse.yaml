@@ -1,0 +1,22 @@
+# Parse Bot MCP API access
+preset:
+  name: parse
+  description: "Parse Bot MCP API access"
+network_policies:
+  parse:
+    name: parse
+    endpoints:
+      - host: api.parse.bot
+        port: 443
+        protocol: rest
+        enforcement: enforce
+        tls: terminate
+        rules:
+          - allow: { method: GET, path: "/**" }
+          - allow: { method: POST, path: "/**" }
+          - allow: { method: PUT, path: "/**" }
+          - allow: { method: PATCH, path: "/**" }
+          - allow: { method: DELETE, path: "/**" }
+    binaries:
+      - { path: /usr/local/bin/openclaw }
+      - { path: /usr/local/bin/node }

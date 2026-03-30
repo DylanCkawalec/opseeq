@@ -50,7 +50,7 @@ RUN chmod +x /usr/local/bin/nemoclaw-start
 ARG NEMOCLAW_MODEL=nvidia/nemotron-3-super-120b-a12b
 ARG NEMOCLAW_PROVIDER_KEY=nvidia
 ARG NEMOCLAW_PRIMARY_MODEL_REF=nvidia/nemotron-3-super-120b-a12b
-ARG CHAT_UI_URL=http://127.0.0.1:18789
+ARG CHAT_UI_URL=https://openclaw0-8lly1uivo.brevlab.com
 ARG NEMOCLAW_INFERENCE_BASE_URL=https://inference.local/v1
 ARG NEMOCLAW_INFERENCE_API=openai-completions
 ARG NEMOCLAW_INFERENCE_COMPAT_B64=e30=
