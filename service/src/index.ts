@@ -3,8 +3,9 @@ import cors from 'cors';
 import crypto from 'node:crypto';
 import http from 'node:http';
 import { loadConfig, type ServiceConfig } from './config.js';
-import { routeInference, routeInferenceStream, listModels } from './router.js';
+import { routeInference, routeInferenceStream, listModels, setKernel } from './router.js';
 import { createMcpServer, handleMcpSse, handleMcpMessages } from './mcp-server.js';
+import { KernelClient } from './kernel.js';
 import type { ChatCompletionRequest } from './router.js';
 
 const config = loadConfig();
@@ -13,7 +14,7 @@ const app = express();
 app.use(cors());
 app.use(express.json({ limit: '2mb' }));
 
-const VERSION = '2.2.0';
+const VERSION = '3.0.0';
 
 // ── Request ID + structured logging ──────────────────────────────
 app.use((req, _res, next) => {
@@ -72,6 +73,7 @@ function shutdown(signal: string): void {
   isShuttingDown = true;
   console.log(`[opseeq] ${signal} received — draining connections (5s grace)…`);
   for (const iv of watchIntervals) clearInterval(iv);
+  kernel.stop();
   if (httpServer) {
     httpServer.close(() => {
       console.log('[opseeq] All connections drained. Exiting.');
@@ -534,11 +536,19 @@ app.get('/', (_req, res) => {
   });
 });
 
+// ── Kernel startup ────────────────────────────────────────────────
+const kernel = new KernelClient();
+kernel.start().then(() => {
+  if (kernel.isReady()) setKernel(kernel);
+}).catch(err => {
+  console.log(`[kernel] start failed (running without kernel): ${err instanceof Error ? err.message : err}`);
+});
+
 // ── Start ─────────────────────────────────────────────────────────
 httpServer = app.listen(config.port, config.host, () => {
   console.log('');
   console.log('  ╔══════════════════════════════════════════╗');
-  console.log('  ║      OPSEEQ AI AGENT GATEWAY v2.2        ║');
+  console.log('  ║    OPSEEQ RUNTIME KERNEL v3.0              ║');
   console.log('  ╚══════════════════════════════════════════╝');
   console.log('');
   console.log(`  Listening:    http://${config.host}:${config.port}`);
@@ -548,6 +558,7 @@ httpServer = app.listen(config.port, config.host, () => {
   console.log(`  Mermate:      ${MERMATE_URL}`);
   console.log(`  Synth:        ${SYNTH_URL}`);
   console.log(`  Ollama:       ${OLLAMA_URL || 'not configured'}`);
+  console.log(`  Kernel:       ${kernel.isReady() ? 'opseeq-core (Rust)' : 'not available (Node.js fallback)'}`);
   console.log('');
 
   void pollSynth();

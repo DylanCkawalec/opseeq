@@ -1,4 +1,11 @@
 import type { ProviderConfig, ServiceConfig } from './config.js';
+import type { KernelClient } from './kernel.js';
+
+let _kernel: KernelClient | null = null;
+
+export function setKernel(k: KernelClient): void {
+  _kernel = k;
+}
 
 async function fetchWithRetry(
   url: string,
@@ -227,6 +234,21 @@ export async function routeInference(
   req: ChatCompletionRequest,
   config: ServiceConfig,
 ): Promise<ChatCompletionResponse> {
+  if (_kernel?.isReady()) {
+    try {
+      const result = await _kernel.call('inference.route', {
+        model: req.model,
+        messages: req.messages,
+        temperature: req.temperature,
+        max_tokens: req.max_tokens || req.max_completion_tokens,
+        stream: false,
+      }) as ChatCompletionResponse;
+      return result;
+    } catch (err) {
+      console.log(`[kernel] inference.route failed, falling back to Node: ${err instanceof Error ? err.message : err}`);
+    }
+  }
+
   const provider = resolveProvider(req.model, config);
   if (!provider) {
     throw new Error(`No provider configured for model: ${req.model}`);
@@ -266,7 +288,13 @@ export async function routeInferenceStream(
   return { stream, provider: provider.name };
 }
 
-export function listModels(config: ServiceConfig): { id: string; provider: string }[] {
+export async function listModels(config: ServiceConfig): Promise<{ id: string; provider: string }[]> {
+  if (_kernel?.isReady()) {
+    try {
+      return await _kernel.call('models.list') as { id: string; provider: string }[];
+    } catch { /* fall through */ }
+  }
+
   const models: { id: string; provider: string }[] = [];
   for (const provider of config.providers) {
     for (const model of provider.models) {
