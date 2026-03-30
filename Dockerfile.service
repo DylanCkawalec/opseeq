@@ -28,11 +28,9 @@ RUN groupadd -r opseeq && useradd -r -g opseeq -d /app -s /usr/sbin/nologin opse
 
 WORKDIR /app
 
-COPY --from=builder /build/dist/ ./dist/
-COPY --from=builder /build/node_modules/ ./node_modules/
-COPY service/package.json ./
-
-RUN chown -R opseeq:opseeq /app
+COPY --from=builder --chown=opseeq:opseeq /build/dist/ ./dist/
+COPY --from=builder --chown=opseeq:opseeq /build/node_modules/ ./node_modules/
+COPY --chown=opseeq:opseeq service/package.json ./
 
 USER opseeq
 
