@@ -12,16 +12,21 @@
 #   - http://localhost:9090/mcp                  (MCP SSE for agentic tools)
 #   - http://localhost:9090/health               (health check)
 
+networks:
+  opseeq-net:
+    driver: bridge
+
 services:
   opseeq:
     build:
       context: .
       dockerfile: Dockerfile.service
       tags:
-        - dylanckawalec/opseeq:latest
         - opseeq:latest
-    image: dylanckawalec/opseeq:latest
+    image: opseeq:latest
     container_name: opseeq
+    init: true
+    stop_grace_period: 10s
     ports:
       - "${OPSEEQ_PORT:-9090}:9090"
     env_file:
@@ -30,8 +35,10 @@ services:
       - OPSEEQ_HOST=0.0.0.0
       - NODE_ENV=production
     restart: unless-stopped
+    networks:
+      - opseeq-net
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9090/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:9090/health/ready"]
       interval: 15s
       timeout: 5s
       retries: 3

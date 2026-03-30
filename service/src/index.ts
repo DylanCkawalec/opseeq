@@ -1,5 +1,7 @@
 import express from 'express';
 import cors from 'cors';
+import crypto from 'node:crypto';
+import http from 'node:http';
 import { loadConfig, type ServiceConfig } from './config.js';
 import { routeInference, routeInferenceStream, listModels } from './router.js';
 import { createMcpServer, handleMcpSse, handleMcpMessages } from './mcp-server.js';
@@ -9,15 +11,82 @@ const config = loadConfig();
 const app = express();
 
 app.use(cors());
-app.use(express.json({ limit: '50mb' }));
+app.use(express.json({ limit: '2mb' }));
 
-const VERSION = '2.0.0';
+const VERSION = '2.2.0';
+
+// ── Request ID + structured logging ──────────────────────────────
+app.use((req, _res, next) => {
+  (req as any).id = (req.headers['x-request-id'] as string) || crypto.randomUUID().slice(0, 12);
+  next();
+});
+
+function log(level: string, msg: string, meta?: Record<string, unknown>): void {
+  const entry = { ts: new Date().toISOString(), level, msg, ...meta };
+  if (level === 'error') console.error(JSON.stringify(entry));
+  else console.log(JSON.stringify(entry));
+}
+
+// ── Per-IP rate limiter (sliding window, in-memory) ──────────────
+const rateBuckets = new Map<string, { count: number; resetAt: number }>();
+const RATE_WINDOW_MS = 60_000;
+const RATE_LIMIT = 120;
+
+function rateLimit(req: express.Request, res: express.Response, next: express.NextFunction): void {
+  const ip = req.ip || req.socket.remoteAddress || 'unknown';
+  const now = Date.now();
+  let bucket = rateBuckets.get(ip);
+  if (!bucket || now >= bucket.resetAt) {
+    bucket = { count: 0, resetAt: now + RATE_WINDOW_MS };
+    rateBuckets.set(ip, bucket);
+  }
+  bucket.count++;
+  res.setHeader('X-RateLimit-Limit', String(RATE_LIMIT));
+  res.setHeader('X-RateLimit-Remaining', String(Math.max(0, RATE_LIMIT - bucket.count)));
+  if (bucket.count > RATE_LIMIT) {
+    res.status(429).json({ error: { message: 'Rate limit exceeded', type: 'rate_limit' } });
+    return;
+  }
+  next();
+}
+app.use(rateLimit);
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, b] of rateBuckets) { if (now >= b.resetAt) rateBuckets.delete(ip); }
+}, 60_000);
 const serverStartedAt = new Date().toISOString();
 
 const MERMATE_URL = (process.env.MERMATE_URL || 'http://127.0.0.1:3333').replace(/\/+$/, '');
 const SYNTH_URL = (process.env.SYNTHESIS_TRADE_URL || 'http://127.0.0.1:8420').replace(/\/+$/, '');
 const OLLAMA_URL = (process.env.OLLAMA_URL || process.env.LOCAL_LLM_BASE_URL || '').replace(/\/+$/, '');
 const DEFAULT_OLLAMA_MODEL = process.env.OLLAMA_MODEL || process.env.LOCAL_LLM_MODEL || 'gpt-oss:20b';
+
+// ── Graceful shutdown state ──────────────────────────────────────
+let isShuttingDown = false;
+let httpServer: http.Server | null = null;
+const watchIntervals: ReturnType<typeof setInterval>[] = [];
+
+function shutdown(signal: string): void {
+  if (isShuttingDown) return;
+  isShuttingDown = true;
+  console.log(`[opseeq] ${signal} received — draining connections (5s grace)…`);
+  for (const iv of watchIntervals) clearInterval(iv);
+  if (httpServer) {
+    httpServer.close(() => {
+      console.log('[opseeq] All connections drained. Exiting.');
+      process.exit(0);
+    });
+    setTimeout(() => {
+      console.log('[opseeq] Grace period expired. Force exit.');
+      process.exit(1);
+    }, 5_000).unref();
+  } else {
+    process.exit(0);
+  }
+}
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
 
 // ── Auth middleware ────────────────────────────────────────────────
 function authenticate(req: express.Request, res: express.Response, next: express.NextFunction): void {
@@ -34,17 +103,29 @@ function authenticate(req: express.Request, res: express.Response, next: express
   next();
 }
 
-// ── Serverless idle shutdown ──────────────────────────────────────
+// ── Idle shutdown (serverless + explicit) ─────────────────────────
 let lastRequestAt = Date.now();
-if (config.serverlessMode) {
-  setInterval(() => {
-    if (Date.now() - lastRequestAt > config.idleTimeoutMs) {
-      console.log(`[opseeq] Idle shutdown after ${config.idleTimeoutMs}ms`);
-      process.exit(0);
-    }
+const idleEnabled = config.serverlessMode || process.env.OPSEEQ_IDLE_SHUTDOWN === 'true';
+if (idleEnabled) {
+  const idleCheck = setInterval(() => {
+    const idleMs = Date.now() - lastRequestAt;
+    if (idleMs > config.idleTimeoutMs * 0.75) console.log(`[opseeq] Idle warning: ${Math.round(idleMs / 1000)}s / ${Math.round(config.idleTimeoutMs / 1000)}s`);
+    if (idleMs > config.idleTimeoutMs) shutdown('idle-timeout');
   }, 30_000);
+  watchIntervals.push(idleCheck);
 }
 app.use((_req, _res, next) => { lastRequestAt = Date.now(); next(); });
+
+// ── Timed cache helper ───────────────────────────────────────────
+function timedCache<T>(ttlMs: number, fn: () => Promise<T>): () => Promise<T> {
+  let cached: T | undefined; let expiresAt = 0;
+  return async () => {
+    if (cached !== undefined && Date.now() < expiresAt) return cached;
+    cached = await fn();
+    expiresAt = Date.now() + ttlMs;
+    return cached;
+  };
+}
 
 // ── Shared fetch helper ──────────────────────────────────────────
 async function fetchJson<T>(url: string, opts: { timeoutMs?: number; method?: string; body?: string } = {}): Promise<T> {
@@ -197,11 +278,32 @@ async function chatWithOllama(messages: Array<{ role: string; content: string }>
   };
 }
 
+// ── Cached accessors ─────────────────────────────────────────────
+const getCachedMermateState = timedCache(5_000, getMermateState);
+const getCachedOllamaState = timedCache(10_000, getOllamaState);
+const getCachedModels = timedCache(30_000, async () => listModels(config));
+
+// ── Mermate background watch ─────────────────────────────────────
+let mermateWatchRunning = false;
+let mermateWatchLastHealthy: string | null = null;
+
+async function pollMermate(): Promise<void> {
+  try {
+    const state = await getMermateState();
+    const wasRunning = mermateWatchRunning;
+    mermateWatchRunning = state.running;
+    if (state.running) mermateWatchLastHealthy = new Date().toISOString();
+    if (!wasRunning && state.running) console.log(`  [mermate-watch] Mermate came online at ${MERMATE_URL} (${state.probeDurationMs}ms)`);
+    else if (wasRunning && !state.running) console.log(`  [mermate-watch] Mermate went offline`);
+  } catch { mermateWatchRunning = false; }
+}
+
 // ══════════════════════════════════════════════════════════════════
 //  ROUTES
 // ══════════════════════════════════════════════════════════════════
 
 app.get('/health', (_req, res) => {
+  if (isShuttingDown) { res.status(503).json({ status: 'shutting_down' }); return; }
   res.json({
     status: 'ok', version: VERSION,
     providers: config.providers.map(p => ({ name: p.name, models: p.models.length })),
@@ -209,10 +311,18 @@ app.get('/health', (_req, res) => {
   });
 });
 
-app.get('/v1/health', (_req, res) => res.json({ status: 'ok' }));
+app.get('/health/ready', (_req, res) => {
+  if (isShuttingDown) { res.status(503).json({ ready: false, reason: 'shutting_down' }); return; }
+  res.json({ ready: true, uptime: process.uptime() });
+});
 
-app.get('/v1/models', authenticate, (_req, res) => {
-  const models = listModels(config);
+app.get('/v1/health', (_req, res) => {
+  if (isShuttingDown) { res.status(503).json({ status: 'shutting_down' }); return; }
+  res.json({ status: 'ok' });
+});
+
+app.get('/v1/models', authenticate, async (_req, res) => {
+  const models = await getCachedModels();
   res.json({ object: 'list', data: models.map(m => ({ id: m.id, object: 'model', created: Math.floor(Date.now() / 1000), owned_by: m.provider })) });
 });
 
@@ -253,17 +363,17 @@ app.post('/v1/embeddings', authenticate, async (req, res) => {
 // ── MCP ───────────────────────────────────────────────────────────
 if (config.mcpEnabled) {
   const mcpServer = createMcpServer(config);
-  app.get('/mcp', handleMcpSse(config, mcpServer));
-  app.post('/mcp/messages', handleMcpMessages(config, mcpServer));
+  app.get('/mcp', authenticate, handleMcpSse(config, mcpServer));
+  app.post('/mcp/messages', authenticate, handleMcpMessages(config, mcpServer));
 }
 
 // ══════════════════════════════════════════════════════════════════
-//  Console-compatible /api/* routes (replaces dylans_nemoclaw fully)
+//  Console-compatible /api/* routes
 // ══════════════════════════════════════════════════════════════════
 
-app.get('/api/status', async (_req, res) => {
-  const allModels = listModels(config);
-  const [mermate, ollama] = await Promise.all([getMermateState(), getOllamaState()]);
+app.get('/api/status', authenticate, async (_req, res) => {
+  const allModels = await getCachedModels();
+  const [mermate, ollama] = await Promise.all([getCachedMermateState(), getCachedOllamaState()]);
   res.json({
     meta: { generatedAt: new Date().toISOString(), serverStartedAt, uptimeSeconds: process.uptime(), version: VERSION },
     controls: {
@@ -292,8 +402,8 @@ app.get('/api/status', async (_req, res) => {
   });
 });
 
-app.get('/api/integrations', async (_req, res) => {
-  const mermate = await getMermateState();
+app.get('/api/integrations', authenticate, async (_req, res) => {
+  const mermate = await getCachedMermateState();
   res.json({
     meta: { generatedAt: new Date().toISOString(), serverStartedAt, uptimeSeconds: process.uptime(), version: VERSION },
     controls: { urls: { opseeq: `http://127.0.0.1:${config.port}`, mermate: MERMATE_URL, synthesisTrade: SYNTH_URL } },
@@ -302,7 +412,7 @@ app.get('/api/integrations', async (_req, res) => {
   });
 });
 
-app.post('/api/chat', async (req, res) => {
+app.post('/api/chat', authenticate, async (req, res) => {
   try {
     const { messages, model: reqModel, transport } = req.body || {};
     if (!messages?.length) { res.status(400).json({ error: 'messages array required' }); return; }
@@ -331,7 +441,7 @@ app.post('/api/chat', async (req, res) => {
   }
 });
 
-app.get('/api/connectivity', async (_req, res) => {
+app.get('/api/connectivity', authenticate, async (_req, res) => {
   const targets = [
     { label: 'NVIDIA NIM API', url: 'https://integrate.api.nvidia.com/v1/models', category: 'egress' as const },
     { label: 'OpenAI API', url: 'https://api.openai.com/v1/models', category: 'egress' as const },
@@ -356,7 +466,7 @@ app.get('/api/connectivity', async (_req, res) => {
   res.json({ generatedAt: new Date().toISOString(), probes });
 });
 
-app.post('/api/connectivity/probe', async (req, res) => {
+app.post('/api/connectivity/probe', authenticate, async (req, res) => {
   const host = req.body?.host;
   if (!host) { res.status(400).json({ error: 'host required' }); return; }
   const url = `https://${host}/`;
@@ -370,12 +480,12 @@ app.post('/api/connectivity/probe', async (req, res) => {
   }
 });
 
-app.get('/api/architect/status', async (_req, res) => {
-  const mermate = await getMermateState();
+app.get('/api/architect/status', authenticate, async (_req, res) => {
+  const mermate = await getCachedMermateState();
   res.json({ architect: { available: mermate.running, mode: 'opseeq-gateway' }, mermate: { baseUrl: MERMATE_URL, ...mermate } });
 });
 
-app.post('/api/architect/pipeline', async (req, res) => {
+app.post('/api/architect/pipeline', authenticate, async (req, res) => {
   try {
     const ctrl = new AbortController(); const timer = setTimeout(() => ctrl.abort(), 120_000);
     const up = await fetch(`${MERMATE_URL}/api/render`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(req.body), signal: ctrl.signal });
@@ -383,7 +493,7 @@ app.post('/api/architect/pipeline', async (req, res) => {
   } catch (err) { res.status(502).json({ error: `Mermate pipeline unreachable: ${err instanceof Error ? err.message : err}` }); }
 });
 
-app.post('/api/builder/scaffold', async (req, res) => {
+app.post('/api/builder/scaffold', authenticate, async (req, res) => {
   try {
     const ctrl = new AbortController(); const timer = setTimeout(() => ctrl.abort(), 30_000);
     const up = await fetch(`${MERMATE_URL}/api/render`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...req.body, scaffold: true }), signal: ctrl.signal });
@@ -425,15 +535,15 @@ app.get('/', (_req, res) => {
 });
 
 // ── Start ─────────────────────────────────────────────────────────
-app.listen(config.port, config.host, () => {
+httpServer = app.listen(config.port, config.host, () => {
   console.log('');
   console.log('  ╔══════════════════════════════════════════╗');
-  console.log('  ║       OPSEEQ AI AGENT GATEWAY v2.0       ║');
+  console.log('  ║      OPSEEQ AI AGENT GATEWAY v2.2        ║');
   console.log('  ╚══════════════════════════════════════════╝');
   console.log('');
   console.log(`  Listening:    http://${config.host}:${config.port}`);
   console.log(`  MCP:          ${config.mcpEnabled ? 'enabled (/mcp)' : 'disabled'}`);
-  console.log(`  Serverless:   ${config.serverlessMode ? `yes (idle: ${config.idleTimeoutMs}ms)` : 'no'}`);
+  console.log(`  Idle:         ${idleEnabled ? `yes (${Math.round(config.idleTimeoutMs / 1000)}s)` : 'no'}`);
   console.log(`  Providers:    ${config.providers.map(p => `${p.name} (${p.models.length})`).join(', ') || 'none'}`);
   console.log(`  Mermate:      ${MERMATE_URL}`);
   console.log(`  Synth:        ${SYNTH_URL}`);
@@ -441,8 +551,14 @@ app.listen(config.port, config.host, () => {
   console.log('');
 
   void pollSynth();
-  setInterval(() => void pollSynth(), 8_000);
+  const synthIv = setInterval(() => void pollSynth(), 8_000);
+  watchIntervals.push(synthIv);
   console.log(`  [synth-watch] Polling ${SYNTH_URL}/health every 8s`);
+
+  void pollMermate();
+  const mermateIv = setInterval(() => void pollMermate(), 15_000);
+  watchIntervals.push(mermateIv);
+  console.log(`  [mermate-watch] Polling ${MERMATE_URL} every 15s`);
 });
 
 export { config, fetchJson, probeService, getMermateState, getOllamaState, chatWithOllama, synthWatch, MERMATE_URL, SYNTH_URL, OLLAMA_URL, VERSION };

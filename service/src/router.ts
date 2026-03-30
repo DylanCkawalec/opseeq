@@ -1,5 +1,28 @@
 import type { ProviderConfig, ServiceConfig } from './config.js';
 
+async function fetchWithRetry(
+  url: string,
+  init: RequestInit,
+  retries = 2,
+  baseDelay = 500,
+): Promise<Response> {
+  let lastErr: Error | undefined;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const res = await fetch(url, init);
+      if (res.status >= 500 && attempt < retries) {
+        await new Promise(r => setTimeout(r, baseDelay * 2 ** attempt));
+        continue;
+      }
+      return res;
+    } catch (err) {
+      lastErr = err instanceof Error ? err : new Error(String(err));
+      if (attempt < retries) await new Promise(r => setTimeout(r, baseDelay * 2 ** attempt));
+    }
+  }
+  throw lastErr ?? new Error('fetch failed after retries');
+}
+
 export interface ChatMessage {
   role: string;
   content: string;
@@ -78,7 +101,7 @@ async function callAnthropicProvider(
   };
   if (systemMsg) body.system = systemMsg.content;
 
-  const res = await fetch(`${provider.baseUrl}/messages`, {
+  const res = await fetchWithRetry(`${provider.baseUrl}/messages`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -117,7 +140,7 @@ async function callOllamaProvider(
   provider: ProviderConfig,
   req: ChatCompletionRequest,
 ): Promise<ChatCompletionResponse> {
-  const res = await fetch(`${provider.baseUrl}/api/chat`, {
+  const res = await fetchWithRetry(`${provider.baseUrl}/api/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -159,7 +182,7 @@ async function callOpenAICompatible(
 ): Promise<ChatCompletionResponse> {
   const body: Record<string, unknown> = { ...req, stream: false };
 
-  const res = await fetch(`${provider.baseUrl}/chat/completions`, {
+  const res = await fetchWithRetry(`${provider.baseUrl}/chat/completions`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
