@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "opseeq": {
+      "url": "http://localhost:9090/mcp",
+      "transport": "sse"
+    }
+  }
+}
