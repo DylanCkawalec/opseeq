@@ -4,6 +4,7 @@ import crypto from 'node:crypto';
 import http from 'node:http';
 import { loadConfig, type ServiceConfig } from './config.js';
 import { routeInference, routeInferenceStream, listModels, setKernel } from './router.js';
+import { getFeedbackSnapshot, getRecentArtifacts, TAU } from './feedback.js';
 import { createMcpServer, handleMcpSse, handleMcpMessages } from './mcp-server.js';
 import { KernelClient } from './kernel.js';
 import type { ChatCompletionRequest } from './router.js';
@@ -14,11 +15,12 @@ const app = express();
 app.use(cors());
 app.use(express.json({ limit: '2mb' }));
 
-const VERSION = '3.0.0';
+const VERSION = '5.0.0';
 
 // ── Request ID + structured logging ──────────────────────────────
 app.use((req, _res, next) => {
-  (req as any).id = (req.headers['x-request-id'] as string) || crypto.randomUUID().slice(0, 12);
+  const provided = (req.headers['x-request-id'] as string) || '';
+  (req as any).id = (provided.length > 0 && provided.length <= 64) ? provided : crypto.randomUUID();
   next();
 });
 
@@ -28,14 +30,24 @@ function log(level: string, msg: string, meta?: Record<string, unknown>): void {
   else console.log(JSON.stringify(entry));
 }
 
-// ── Per-IP rate limiter (sliding window, in-memory) ──────────────
+// ── Per-IP rate limiter (sliding window, bounded) ───────────────
 const rateBuckets = new Map<string, { count: number; resetAt: number }>();
 const RATE_WINDOW_MS = 60_000;
 const RATE_LIMIT = 120;
+const MAX_RATE_BUCKETS = 10_000;
 
 function rateLimit(req: express.Request, res: express.Response, next: express.NextFunction): void {
   const ip = req.ip || req.socket.remoteAddress || 'unknown';
   const now = Date.now();
+  // Evict expired + cap size to prevent memory exhaustion
+  if (rateBuckets.size > MAX_RATE_BUCKETS) {
+    for (const [k, b] of rateBuckets) { if (now >= b.resetAt) rateBuckets.delete(k); }
+    // If still over limit after expiry sweep, drop oldest 25%
+    if (rateBuckets.size > MAX_RATE_BUCKETS) {
+      const entries = [...rateBuckets.entries()].sort((a, b) => a[1].resetAt - b[1].resetAt);
+      for (let i = 0; i < entries.length * 0.25; i++) rateBuckets.delete(entries[i][0]);
+    }
+  }
   let bucket = rateBuckets.get(ip);
   if (!bucket || now >= bucket.resetAt) {
     bucket = { count: 0, resetAt: now + RATE_WINDOW_MS };
@@ -198,6 +210,12 @@ async function pollSynth(): Promise<void> {
     }
   } catch (err) {
     synthWatch.reachable = false; synthWatch.verified = false;
+    // Clear stale data from last successful probe
+    synthWatch.version = null;
+    synthWatch.simulationMode = null;
+    synthWatch.approvalRequired = null;
+    synthWatch.aiEngineAvailable = null;
+    synthWatch.predictionsAvailable = null;
     synthWatch.consecutiveFailures++; synthWatch.consecutiveSuccesses = 0;
     synthWatch.latencyMs = Date.now() - t0;
     synthWatch.probedAt = new Date().toISOString();
@@ -263,19 +281,26 @@ async function getOllamaState(): Promise<OllamaState> {
 async function chatWithOllama(messages: Array<{ role: string; content: string }>, model?: string) {
   if (!OLLAMA_URL) throw new Error('Ollama not configured (set OLLAMA_URL)');
   const m = model || DEFAULT_OLLAMA_MODEL;
+  const t0 = Date.now();
   const res = await fetch(`${OLLAMA_URL}/api/chat`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ model: m, messages, stream: false }),
   });
+  if (!res.ok) {
+    const errText = await res.text().catch(() => '');
+    log('warn', 'ollama_chat_failed', { model: m, status: res.status, latencyMs: Date.now() - t0 });
+    return { ok: false, payload: { error: `Ollama HTTP ${res.status}: ${errText}`, model: m, transport: 'ollama_local' } };
+  }
   const raw = await res.json() as { model?: string; message?: { role: string; content: string; thinking?: string } };
-  if (!res.ok || !raw.message?.content?.trim()) {
-    return { ok: false, payload: { error: `Ollama chat failed: ${res.status}`, model: m, transport: 'ollama_local' } };
+  if (!raw.message?.content?.trim()) {
+    log('warn', 'ollama_empty_response', { model: m, latencyMs: Date.now() - t0 });
+    return { ok: false, payload: { error: 'Ollama returned empty content', model: m, transport: 'ollama_local' } };
   }
   return {
     ok: true,
     payload: {
       message: { role: raw.message.role, content: raw.message.content.trim(), reasoning: raw.message.thinking?.trim() || null },
-      model: raw.model || m, requestedModel: m, transport: 'ollama_local',
+      model: raw.model || m, requestedModel: m, transport: 'ollama_local', latencyMs: Date.now() - t0,
     },
   };
 }
@@ -333,18 +358,62 @@ app.post('/v1/chat/completions', authenticate, async (req, res) => {
     const body = req.body as ChatCompletionRequest;
     if (!body.messages?.length) { res.status(400).json({ error: { message: 'messages required', type: 'invalid_request' } }); return; }
     body.model = body.model || config.defaultModel;
+    // Idempotency: return cached result if same key
+    const idempotencyKey = req.headers['idempotency-key'] as string | undefined;
+    if (idempotencyKey) {
+      const cached = idempotencyCache.get(idempotencyKey);
+      if (cached && Date.now() < cached.expiresAt) {
+        res.setHeader('X-Opseeq-Idempotent', 'hit');
+        res.json(cached.result);
+        return;
+      }
+    }
     if (body.stream) {
+      let headersCommitted = false;
       try {
         const { stream, provider } = await routeInferenceStream(body, config);
-        res.setHeader('Content-Type', 'text/event-stream'); res.setHeader('Cache-Control', 'no-cache');
-        res.setHeader('Connection', 'keep-alive'); res.setHeader('X-Opseeq-Provider', provider);
-        const reader = stream.getReader(); const dec = new TextDecoder();
-        const pump = async (): Promise<void> => { const { done, value } = await reader.read(); if (done) { res.end(); return; } res.write(dec.decode(value, { stream: true })); return pump(); };
+        res.setHeader('Content-Type', 'text/event-stream');
+        res.setHeader('Cache-Control', 'no-cache');
+        res.setHeader('Connection', 'keep-alive');
+        res.setHeader('X-Opseeq-Provider', provider);
+        headersCommitted = true;
+        const reader = stream.getReader();
+        const dec = new TextDecoder();
+        const pump = async (): Promise<void> => {
+          try {
+            const { done, value } = await reader.read();
+            if (done) { res.end(); return; }
+            res.write(dec.decode(value, { stream: true }));
+            return pump();
+          } catch (chunkErr) {
+            log('error', 'stream_chunk_error', { trace_id: (req as any).id, error: chunkErr instanceof Error ? chunkErr.message : String(chunkErr) });
+            res.write(`data: ${JSON.stringify({ error: { message: 'stream interrupted', type: 'stream_error' } })}\n\n`);
+            res.end();
+          }
+        };
         await pump();
-      } catch { const fb = await routeInference({ ...body, stream: false }, config, (req as any).id); res.json(fb); }
+      } catch (err) {
+        if (headersCommitted) {
+          // Headers already sent as SSE — can't switch to JSON, close gracefully
+          res.write(`data: ${JSON.stringify({ error: { message: err instanceof Error ? err.message : 'upstream error', type: 'stream_error' } })}\n\n`);
+          res.end();
+        } else {
+          // Headers not sent yet — fall back to non-streaming
+          try {
+            const fb = await routeInference({ ...body, stream: false }, config, (req as any).id);
+            res.json(fb);
+          } catch (fbErr) {
+            res.status(502).json({ error: { message: fbErr instanceof Error ? fbErr.message : 'upstream error', type: 'upstream_error' } });
+          }
+        }
+      }
       return;
     }
-    res.json(await routeInference(body, config, (req as any).id));
+    const result = await routeInference(body, config, (req as any).id);
+    if (idempotencyKey) {
+      idempotencyCache.set(idempotencyKey, { result, expiresAt: Date.now() + 3600_000 });
+    }
+    res.json(result);
   } catch (err) {
     res.status(502).json({ error: { message: err instanceof Error ? err.message : 'upstream error', type: 'upstream_error' } });
   }
@@ -360,6 +429,19 @@ app.post('/v1/embeddings', authenticate, async (req, res) => {
     });
     res.status(up.status).json(await up.json());
   } catch (err) { res.status(502).json({ error: { message: err instanceof Error ? err.message : 'error' } }); }
+});
+
+// ── Idempotency cache (prevents duplicate inference on retries) ──
+const idempotencyCache = new Map<string, { result: unknown; expiresAt: number }>();
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, v] of idempotencyCache) { if (now >= v.expiresAt) idempotencyCache.delete(k); }
+}, 120_000);
+
+// ── Inference artifacts API ─────────────────────────────────────
+app.get('/api/artifacts', authenticate, (_req, res) => {
+  const limit = Math.min(100, parseInt((_req.query as Record<string, string>).limit || '20', 10));
+  res.json({ artifacts: getRecentArtifacts(limit), tau: TAU });
 });
 
 // ── MCP ───────────────────────────────────────────────────────────
@@ -400,7 +482,8 @@ app.get('/api/status', authenticate, async (_req, res) => {
       watch: { consecutiveSuccesses: synthWatch.consecutiveSuccesses, consecutiveFailures: synthWatch.consecutiveFailures, pollIntervalSeconds: 8 },
     },
     mcp: { enabled: config.mcpEnabled, endpoint: '/mcp', transport: 'sse' },
-    transport: { primary: 'multi-provider (NIM > OpenAI > Anthropic > Ollama)', mode: 'opseeq-gateway' },
+    selfImprovement: getFeedbackSnapshot(),
+    transport: { primary: 'multi-provider (NIM > OpenAI > Anthropic > Ollama) + adaptive feedback', mode: 'opseeq-gateway' },
   });
 });
 
@@ -456,14 +539,14 @@ app.get('/api/connectivity', authenticate, async (_req, res) => {
   ];
   const probes = await Promise.all(targets.map(async (t) => {
     const start = Date.now();
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 5000);
     try {
-      const ctrl = new AbortController(); const timer = setTimeout(() => ctrl.abort(), 5000);
       const r = await fetch(t.url, { signal: ctrl.signal, method: t.category === 'egress' ? 'HEAD' : 'GET' });
-      clearTimeout(timer);
       return { label: t.label, url: t.url, category: t.category, reachable: true, httpStatus: r.status, latencyMs: Date.now() - start };
     } catch {
       return { label: t.label, url: t.url, category: t.category, reachable: false, httpStatus: null, latencyMs: Date.now() - start };
-    }
+    } finally { clearTimeout(timer); }
   }));
   res.json({ generatedAt: new Date().toISOString(), probes });
 });
@@ -473,13 +556,14 @@ app.post('/api/connectivity/probe', authenticate, async (req, res) => {
   if (!host) { res.status(400).json({ error: 'host required' }); return; }
   const url = `https://${host}/`;
   const start = Date.now();
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 8000);
   try {
-    const ctrl = new AbortController(); setTimeout(() => ctrl.abort(), 8000);
     const r = await fetch(url, { signal: ctrl.signal, method: 'HEAD' });
     res.json({ probe: { host, url, reachable: true, httpStatus: r.status, latencyMs: Date.now() - start } });
   } catch {
     res.json({ probe: { host, url, reachable: false, httpStatus: null, latencyMs: Date.now() - start } });
-  }
+  } finally { clearTimeout(timer); }
 });
 
 app.get('/api/architect/status', authenticate, async (_req, res) => {
@@ -564,7 +648,7 @@ kernel.start().then(() => {
 httpServer = app.listen(config.port, config.host, () => {
   console.log('');
   console.log('  ╔══════════════════════════════════════════╗');
-  console.log('  ║    OPSEEQ RUNTIME KERNEL v3.0              ║');
+  console.log('  ║    OPSEEQ RUNTIME KERNEL v5.0              ║');
   console.log('  ╚══════════════════════════════════════════╝');
   console.log('');
   console.log(`  Listening:    http://${config.host}:${config.port}`);
@@ -577,15 +661,26 @@ httpServer = app.listen(config.port, config.host, () => {
   console.log(`  Kernel:       ${kernel.isReady() ? 'opseeq-core (Rust)' : 'not available (Node.js fallback)'}`);
   console.log('');
 
-  void pollSynth();
-  const synthIv = setInterval(() => void pollSynth(), 8_000);
+  // Adaptive polling: back off on failures, speed up on recovery
+  let synthPollMs = 10_000;
+  void pollSynth().then(() => { if (synthWatch.reachable) synthPollMs = 15_000; });
+  const synthIv = setInterval(() => {
+    void pollSynth().then(() => {
+      synthPollMs = synthWatch.reachable ? 15_000 : Math.min(120_000, synthPollMs * 1.5);
+    });
+  }, 10_000);
   watchIntervals.push(synthIv);
-  console.log(`  [synth-watch] Polling ${SYNTH_URL}/health every 8s`);
+  console.log(`  [synth-watch] Polling ${SYNTH_URL}/health (adaptive 10-120s)`);
 
+  let mermatePollMs = 15_000;
   void pollMermate();
-  const mermateIv = setInterval(() => void pollMermate(), 15_000);
+  const mermateIv = setInterval(() => {
+    void pollMermate().then(() => {
+      mermatePollMs = mermateWatchRunning ? 20_000 : Math.min(120_000, mermatePollMs * 1.5);
+    });
+  }, 15_000);
   watchIntervals.push(mermateIv);
-  console.log(`  [mermate-watch] Polling ${MERMATE_URL} every 15s`);
+  console.log(`  [mermate-watch] Polling ${MERMATE_URL} (adaptive 15-120s)`);
 });
 
 export { config, fetchJson, probeService, getMermateState, getOllamaState, chatWithOllama, synthWatch, MERMATE_URL, SYNTH_URL, OLLAMA_URL, VERSION };

@@ -46,7 +46,7 @@ function parseProviders(): ProviderConfig[] {
       name: 'anthropic',
       baseUrl: process.env.ANTHROPIC_BASE_URL || 'https://api.anthropic.com/v1',
       apiKey: process.env.ANTHROPIC_API_KEY,
-      models: (process.env.ANTHROPIC_MODELS || 'claude-4-opus,claude-4-sonnet,claude-3.5-sonnet').split(',').map(s => s.trim()),
+      models: (process.env.ANTHROPIC_MODELS || 'claude-opus-4-6,claude-sonnet-4-6,claude-haiku-4-5-20251001').split(',').map(s => s.trim()),
       priority: 3,
     });
   }
@@ -88,7 +88,7 @@ export function loadConfig(): ServiceConfig {
     host: process.env.OPSEEQ_HOST || '0.0.0.0',
     apiKeys,
     providers,
-    defaultModel: process.env.OPSEEQ_DEFAULT_MODEL || (hasNvidia ? 'nvidia/nemotron-3-super-120b-a12b' : 'gpt-4o'),
+    defaultModel: process.env.OPSEEQ_DEFAULT_MODEL || (hasNvidia ? 'nvidia/nemotron-3-super-120b-a12b' : providers.some(p => p.name === 'anthropic') ? 'claude-sonnet-4-6' : 'gpt-4o'),
     mcpEnabled: process.env.OPSEEQ_MCP_ENABLED !== 'false',
     serverlessMode: process.env.OPSEEQ_SERVERLESS === 'true',
     idleTimeoutMs: parseInt(process.env.OPSEEQ_IDLE_TIMEOUT_MS || '300000', 10),

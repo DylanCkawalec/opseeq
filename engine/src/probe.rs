@@ -112,7 +112,15 @@ pub async fn synth_predict(
         .map_err(|e| format!("synth predict json: {e}"))
 }
 
-pub fn scan_directory(dir: &str) -> serde_json::Value {
+/// Async wrapper: offloads blocking filesystem scan to Tokio's blocking pool.
+pub async fn scan_directory_async(dir: &str) -> serde_json::Value {
+    let dir = dir.to_string();
+    tokio::task::spawn_blocking(move || scan_directory_sync(&dir))
+        .await
+        .unwrap_or_else(|e| serde_json::json!({ "error": format!("join: {e}"), "repos": [] }))
+}
+
+fn scan_directory_sync(dir: &str) -> serde_json::Value {
     let path = std::path::Path::new(dir);
     if !path.is_dir() {
         return serde_json::json!({ "error": format!("{} is not a directory", dir), "repos": [] });
@@ -163,7 +171,15 @@ pub fn scan_directory(dir: &str) -> serde_json::Value {
     serde_json::json!({ "path": dir, "repos_found": repos.len(), "repos": repos })
 }
 
-pub fn verify_binary(bin_path: &str) -> serde_json::Value {
+/// Async wrapper: offloads blocking binary verification to Tokio's blocking pool.
+pub async fn verify_binary_async(bin_path: &str) -> serde_json::Value {
+    let bin_path = bin_path.to_string();
+    tokio::task::spawn_blocking(move || verify_binary_sync(&bin_path))
+        .await
+        .unwrap_or_else(|e| serde_json::json!({ "exists": false, "error": format!("join: {e}") }))
+}
+
+fn verify_binary_sync(bin_path: &str) -> serde_json::Value {
     let path = std::path::Path::new(bin_path);
     if !path.exists() {
         return serde_json::json!({ "exists": false, "path": bin_path, "error": "file not found" });

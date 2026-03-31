@@ -55,6 +55,20 @@ body {
 .health-dot.online { background: var(--success); box-shadow: 0 0 8px var(--accent-dim); }
 .health-dot.offline { background: var(--danger); }
 
+.session-hint {
+  max-width: 420px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-dim);
+  line-height: 1.45;
+  margin: -8px 16px 20px;
+}
+.session-hint-dash {
+  margin: 6px 0 0;
+  text-align: left;
+  max-width: none;
+}
+
 .btn-primary {
   padding: 14px 36px; border: none; border-radius: var(--radius-pill);
   background: var(--accent); color: #000; font-weight: 600; font-size: 15px;

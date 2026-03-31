@@ -9,11 +9,24 @@ const MERMATE_URL = (process.env.MERMATE_URL || 'http://127.0.0.1:3333').replace
 const SYNTH_URL = (process.env.SYNTHESIS_TRADE_URL || 'http://127.0.0.1:8420').replace(/\/+$/, '');
 const OPSEEQ_URL = process.env.OPSEEQ_SELF_URL || 'http://127.0.0.1:9090';
 
+const SELF_AUTH_KEY = (() => {
+  const raw = process.env.OPSEEQ_API_KEYS || process.env.OPSEEQ_API_KEY || '';
+  const first = raw.split(',').map(s => s.trim()).find(s => s.length > 0);
+  return first || '';
+})();
+
 async function requestJson<T>(url: string, init: RequestInit = {}): Promise<T> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 15_000);
   try {
-    const res = await fetch(url, { ...init, headers: { 'Content-Type': 'application/json', ...(init.headers as Record<string, string> ?? {}) }, signal: ctrl.signal });
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...(init.headers as Record<string, string> ?? {}),
+    };
+    if (SELF_AUTH_KEY && url.startsWith(OPSEEQ_URL)) {
+      headers['Authorization'] = `Bearer ${SELF_AUTH_KEY}`;
+    }
+    const res = await fetch(url, { ...init, headers, signal: ctrl.signal });
     const payload = await res.json() as T;
     if (!res.ok) throw new Error(typeof payload === 'object' && payload !== null && 'error' in payload ? String((payload as { error: unknown }).error) : `${url} → ${res.status}`);
     return payload;
@@ -28,7 +41,7 @@ function errorResult(msg: string, err: unknown) {
 }
 
 export function createMcpServer(config: ServiceConfig): McpServer {
-  const server = new McpServer({ name: 'opseeq', version: '3.0.0' });
+  const server = new McpServer({ name: 'opseeq', version: '5.0.0' });
 
   // ── 1. opseeq_status ─────────────────────────────────────────
   server.tool('opseeq_status', 'Full gateway status: providers, models, Mermate, Synth, Ollama, MCP, connectivity', {}, async () => {
@@ -59,7 +72,7 @@ export function createMcpServer(config: ServiceConfig): McpServer {
 
   // ── 4. inference ──────────────────────────────────────────────
   server.tool('inference', 'Direct inference through multi-provider router', {
-    model: z.string().describe('Model (e.g. gpt-4o, nvidia/nemotron-3-super-120b-a12b, claude-4-sonnet)'),
+    model: z.string().describe('Model (e.g. gpt-4o, nvidia/nemotron-3-super-120b-a12b, claude-opus-4-6, claude-sonnet-4-6)'),
     system_prompt: z.string().optional(),
     user_prompt: z.string().describe('User message'),
     temperature: z.number().min(0).max(2).optional(),
@@ -300,81 +313,101 @@ export function createMcpServer(config: ServiceConfig): McpServer {
     }
   });
 
-  // ── 21. desktop_scan ─────────────────────────────────────────
+  // ── 21. desktop_scan (async fs) ──────────────────────────────
   server.tool('desktop_scan', 'Scan a directory (default ~/Desktop/developer/) for repos and their Opseeq connection status', {
     path: z.string().optional().describe('Directory to scan (default: ~/Desktop/developer/)'),
   }, async ({ path: scanPath }) => {
     const dir = scanPath || `${process.env.HOME || '/tmp'}/Desktop/developer`;
     try {
-      const fs = await import('node:fs');
+      const fsp = (await import('node:fs')).promises;
       const pathMod = await import('node:path');
-      const entries = fs.readdirSync(dir, { withFileTypes: true });
-      const repos = entries
-        .filter(e => e.isDirectory() && !e.name.startsWith('.') && e.name !== 'node_modules')
-        .map(e => {
-          const p = pathMod.join(dir, e.name);
-          const hasPkg = fs.existsSync(pathMod.join(p, 'package.json'));
-          const hasCargo = fs.existsSync(pathMod.join(p, 'Cargo.toml'));
-          const hasEnv = fs.existsSync(pathMod.join(p, '.env'));
-          const hasMcp = fs.existsSync(pathMod.join(p, '.mcp.json'));
-          let opseeqConnected = false;
-          if (hasEnv) {
-            try {
-              const envContent = fs.readFileSync(pathMod.join(p, '.env'), 'utf8');
-              opseeqConnected = envContent.includes('OPSEEQ_URL') || envContent.includes('OPENAI_BASE_URL');
-            } catch {}
-          }
-          return { name: e.name, path: p, has_package_json: hasPkg, has_cargo_toml: hasCargo, has_env: hasEnv, has_mcp_json: hasMcp, opseeq_connected: opseeqConnected };
-        });
+      const entries = await fsp.readdir(dir, { withFileTypes: true });
+      const repos = await Promise.all(
+        entries
+          .filter(e => e.isDirectory() && !e.name.startsWith('.') && e.name !== 'node_modules')
+          .map(async e => {
+            const p = pathMod.join(dir, e.name);
+            const check = async (f: string) => fsp.access(pathMod.join(p, f)).then(() => true, () => false);
+            const [hasPkg, hasCargo, hasEnv, hasMcp] = await Promise.all([
+              check('package.json'), check('Cargo.toml'), check('.env'), check('.mcp.json'),
+            ]);
+            let opseeqConnected = false;
+            if (hasEnv) {
+              try {
+                const envContent = await fsp.readFile(pathMod.join(p, '.env'), 'utf8');
+                opseeqConnected = envContent.includes('OPSEEQ_URL') || envContent.includes('OPENAI_BASE_URL');
+              } catch {}
+            }
+            return { name: e.name, path: p, has_package_json: hasPkg, has_cargo_toml: hasCargo, has_env: hasEnv, has_mcp_json: hasMcp, opseeq_connected: opseeqConnected };
+          }),
+      );
       return jsonResult({ path: dir, repos_found: repos.length, repos });
     } catch (e) { return errorResult(`Scan failed for ${dir}`, e); }
   });
 
-  // ── 22. repo_organize ────────────────────────────────────────
+  // ── 22. repo_organize (async fs) ─────────────────────────────
   server.tool('repo_organize', 'Verify and clean up a Mermate-built repo: check structure, generate missing .env/.mcp.json for Opseeq', {
     repo_path: z.string().min(1).describe('Absolute path to the repo'),
   }, async ({ repo_path }) => {
     try {
-      const fs = await import('node:fs');
+      const fsp = (await import('node:fs')).promises;
       const pathMod = await import('node:path');
-      const checks: Array<{ item: string; status: string; action?: string }> = [];
 
-      const hasPkg = fs.existsSync(pathMod.join(repo_path, 'package.json'));
-      const hasCargo = fs.existsSync(pathMod.join(repo_path, 'Cargo.toml'));
-      checks.push({ item: 'project_file', status: hasPkg || hasCargo ? 'found' : 'missing' });
-
-      for (const f of ['README.md', 'run.sh']) {
-        checks.push({ item: f, status: fs.existsSync(pathMod.join(repo_path, f)) ? 'found' : 'missing' });
+      const safeRoot = process.env.HOME || '/tmp';
+      const resolved = pathMod.resolve(repo_path);
+      if (!resolved.startsWith(safeRoot)) {
+        return errorResult('Path must be under home directory', new Error(`path traversal blocked: ${resolved}`));
+      }
+      try {
+        const stat = await fsp.lstat(resolved);
+        if (stat.isSymbolicLink()) {
+          return errorResult('Symlinks not allowed for repo root', new Error('symlink detected'));
+        }
+        if (!stat.isDirectory()) {
+          return errorResult('Path is not a directory', new Error(`not a directory: ${resolved}`));
+        }
+      } catch (statErr) {
+        return errorResult('Path not accessible', statErr);
       }
 
-      const envPath = pathMod.join(repo_path, '.env');
-      if (!fs.existsSync(envPath)) {
-        fs.writeFileSync(envPath, `# Opseeq connection\nOPENAI_BASE_URL=http://localhost:9090/v1\nOPSEEQ_URL=http://localhost:9090\n`);
+      const checks: Array<{ item: string; status: string; action?: string }> = [];
+      const exists = async (f: string) => fsp.access(pathMod.join(resolved, f)).then(() => true, () => false);
+
+      const [hasPkg, hasCargo, hasReadme, hasRun] = await Promise.all([
+        exists('package.json'), exists('Cargo.toml'), exists('README.md'), exists('run.sh'),
+      ]);
+      checks.push({ item: 'project_file', status: hasPkg || hasCargo ? 'found' : 'missing' });
+      checks.push({ item: 'README.md', status: hasReadme ? 'found' : 'missing' });
+      checks.push({ item: 'run.sh', status: hasRun ? 'found' : 'missing' });
+
+      const envPath = pathMod.join(resolved, '.env');
+      if (!(await exists('.env'))) {
+        await fsp.writeFile(envPath, `# Opseeq connection\nOPENAI_BASE_URL=http://localhost:9090/v1\nOPSEEQ_URL=http://localhost:9090\n`);
         checks.push({ item: '.env', status: 'created', action: 'Generated with Opseeq connection vars' });
       } else {
-        const content = fs.readFileSync(envPath, 'utf8');
+        const content = await fsp.readFile(envPath, 'utf8');
         if (!content.includes('OPSEEQ_URL')) {
-          fs.appendFileSync(envPath, `\n# Opseeq connection\nOPSEEQ_URL=http://localhost:9090\n`);
+          await fsp.appendFile(envPath, `\n# Opseeq connection\nOPSEEQ_URL=http://localhost:9090\n`);
           checks.push({ item: '.env', status: 'updated', action: 'Appended OPSEEQ_URL' });
         } else {
           checks.push({ item: '.env', status: 'found' });
         }
       }
 
-      const mcpPath = pathMod.join(repo_path, '.mcp.json');
-      if (!fs.existsSync(mcpPath)) {
-        fs.writeFileSync(mcpPath, JSON.stringify({ mcpServers: { opseeq: { url: 'http://localhost:9090/mcp' } } }, null, 2) + '\n');
+      const mcpPath = pathMod.join(resolved, '.mcp.json');
+      if (!(await exists('.mcp.json'))) {
+        await fsp.writeFile(mcpPath, JSON.stringify({ mcpServers: { opseeq: { url: 'http://localhost:9090/mcp' } } }, null, 2) + '\n');
         checks.push({ item: '.mcp.json', status: 'created', action: 'Generated for Opseeq MCP' });
       } else {
         checks.push({ item: '.mcp.json', status: 'found' });
       }
 
       if (hasCargo) {
-        const binDir = pathMod.join(repo_path, 'target', 'release');
-        checks.push({ item: 'rust_binary', status: fs.existsSync(binDir) ? 'found' : 'not_built' });
+        const hasBin = await exists('target/release');
+        checks.push({ item: 'rust_binary', status: hasBin ? 'found' : 'not_built' });
       }
 
-      return jsonResult({ repo_path, checks });
+      return jsonResult({ repo_path: resolved, checks });
     } catch (e) { return errorResult('Repo organize failed', e); }
   });
 
@@ -396,17 +429,66 @@ export function createMcpServer(config: ServiceConfig): McpServer {
     } catch (e) { return errorResult(`Artifact verification failed for ${stage}`, e); }
   });
 
-  // ── 24. health_check ─────────────────────────────────────────
+  // ── 25. browser_navigate ─────────────────────────────────────
+  server.tool('browser_navigate', 'Navigate the Opseeq-controlled browser to a URL (Mermate :3333, Synth :8420, or any URL). Returns page title and element state.', {
+    url: z.string().min(1).describe('URL to navigate to (e.g. http://localhost:3333, http://localhost:8420)'),
+    screenshot: z.boolean().optional().describe('Take a screenshot after navigation'),
+  }, async ({ url, screenshot }) => {
+    const { exec } = await import('node:child_process');
+    const { promisify } = await import('node:util');
+    const execAsync = promisify(exec);
+    try {
+      await execAsync(`browser-use open "${url}"`, { timeout: 15_000 });
+      const { stdout: state } = await execAsync('browser-use state', { timeout: 10_000 });
+      let screenshotPath: string | null = null;
+      if (screenshot) {
+        try {
+          const { stdout: ssOut } = await execAsync('browser-use screenshot', { timeout: 10_000 });
+          screenshotPath = ssOut.trim();
+        } catch {}
+      }
+      return jsonResult({ url, state: state.trim(), screenshot: screenshotPath });
+    } catch (e) { return errorResult(`Browser navigate failed for ${url}`, e); }
+  });
+
+  // ── 26. browser_interact ────────────────────────────────────
+  server.tool('browser_interact', 'Interact with elements in the Opseeq-controlled browser: click, type, scroll. Use browser_navigate first.', {
+    action: z.enum(['click', 'type', 'scroll_down', 'scroll_up', 'screenshot', 'state']).describe('Action to perform'),
+    element_index: z.number().optional().describe('Element index from browser state (for click/type)'),
+    text: z.string().optional().describe('Text to type (for type action)'),
+  }, async ({ action, element_index, text }) => {
+    const { exec } = await import('node:child_process');
+    const { promisify } = await import('node:util');
+    const execAsync = promisify(exec);
+    try {
+      let cmd: string;
+      switch (action) {
+        case 'click': cmd = `browser-use click ${element_index ?? 0}`; break;
+        case 'type': cmd = `browser-use input ${element_index ?? 0} "${(text ?? '').replace(/"/g, '\\"')}"`; break;
+        case 'scroll_down': cmd = 'browser-use scroll down'; break;
+        case 'scroll_up': cmd = 'browser-use scroll up'; break;
+        case 'screenshot': cmd = 'browser-use screenshot'; break;
+        case 'state': cmd = 'browser-use state'; break;
+        default: cmd = 'browser-use state';
+      }
+      const { stdout } = await execAsync(cmd, { timeout: 10_000 });
+      return jsonResult({ action, element_index, text, result: stdout.trim() });
+    } catch (e) { return errorResult(`Browser interaction failed: ${action}`, e); }
+  });
+
+  // ── 27. health_check ─────────────────────────────────────────
   server.tool('health_check', 'Check health of all configured providers', {}, async () => {
     const providerStatus = await Promise.all(config.providers.map(async (p) => {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 5000);
       try {
-        const ctrl = new AbortController(); setTimeout(() => ctrl.abort(), 5000);
         let ok = false;
         if (p.name === 'ollama') { const r = await fetch(`${p.baseUrl}/api/tags`, { signal: ctrl.signal }); ok = r.ok; }
         else if (p.name === 'anthropic') { ok = !!p.apiKey; }
         else { const r = await fetch(`${p.baseUrl}/models`, { headers: { 'Authorization': `Bearer ${p.apiKey}` }, signal: ctrl.signal }); ok = r.ok; }
         return { name: p.name, status: ok ? 'healthy' : 'degraded', models: p.models.length };
       } catch { return { name: p.name, status: 'unreachable', models: p.models.length }; }
+      finally { clearTimeout(timer); }
     }));
     return jsonResult({ service: 'opseeq', status: 'running', providers: providerStatus });
   });

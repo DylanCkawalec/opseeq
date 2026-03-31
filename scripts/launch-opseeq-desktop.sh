@@ -3,7 +3,9 @@ set -euo pipefail
 
 OPSEEQ_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 OPSEEQ_PORT="${OPSEEQ_PORT:-9090}"
+OPSEEQ_DASHBOARD_PORT="${OPSEEQ_DASHBOARD_PORT:-7070}"
 OPSEEQ_URL="http://127.0.0.1:${OPSEEQ_PORT}"
+OPSEEQ_DASHBOARD_URL="http://localhost:${OPSEEQ_DASHBOARD_PORT}"
 
 echo ""
 echo "  ╔══════════════════════════════════════════╗"
@@ -42,7 +44,7 @@ ensure_opseeq() {
       -p "${OPSEEQ_PORT}:9090" \
       --restart unless-stopped \
       --env-file "${OPSEEQ_DIR}/.env" \
-      opseeq:latest &>/dev/null \
+      opseeq:v5 &>/dev/null \
     && echo "  Opseeq: started new container" \
     || { echo "  ERROR: could not start opseeq container"; return 1; }
   fi
@@ -82,6 +84,42 @@ print(f'  MCP:        {\"enabled\" if d[\"mcp\"][\"enabled\"] else \"disabled\"}
   echo ""
 }
 
+ensure_dashboard() {
+  if curl -sf "${OPSEEQ_DASHBOARD_URL}" &>/dev/null; then
+    echo "  Dashboard: already running at ${OPSEEQ_DASHBOARD_URL}"
+    return 0
+  fi
+
+  echo "  Starting Opseeq Dashboard..."
+  cd "${OPSEEQ_DIR}/dashboard"
+  OPSEEQ_GATEWAY_URL="${OPSEEQ_URL}" OPSEEQ_DASHBOARD_PORT="${OPSEEQ_DASHBOARD_PORT}" \
+    node server.js &>/dev/null &
+  DASHBOARD_PID=$!
+
+  for i in 1 2 3 4 5; do
+    sleep 1
+    if curl -sf "${OPSEEQ_DASHBOARD_URL}" &>/dev/null; then
+      echo "  Dashboard: running at ${OPSEEQ_DASHBOARD_URL} (pid ${DASHBOARD_PID})"
+      return 0
+    fi
+  done
+  echo "  WARNING: dashboard did not start within 5s"
+  return 1
+}
+
+open_browser() {
+  if command -v open &>/dev/null; then
+    sleep 1
+    open "${OPSEEQ_DASHBOARD_URL}"
+  fi
+}
+
 ensure_ollama
 ensure_opseeq
+ensure_dashboard
 print_status
+
+echo "  Dashboard:  ${OPSEEQ_DASHBOARD_URL}"
+echo ""
+
+open_browser

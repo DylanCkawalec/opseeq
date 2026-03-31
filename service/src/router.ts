@@ -1,5 +1,6 @@
 import type { ProviderConfig, ServiceConfig } from './config.js';
 import type { KernelClient } from './kernel.js';
+import { recordSuccess, recordArtifact } from './feedback.js';
 
 let _kernel: KernelClient | null = null;
 
@@ -166,7 +167,8 @@ async function callOllamaProvider(
   const data = await res.json() as { model?: string; message?: { content: string; thinking?: string; role?: string }; eval_count?: number; prompt_eval_count?: number };
 
   const msg: ChatMessage = { role: 'assistant', content: data.message?.content || '' };
-  if (data.message?.thinking) Object.assign(msg, { reasoning: data.message.thinking });
+  // TypeScript fix: Convert to 'unknown' first to safely assign arbitrary key
+  if (data.message?.thinking) (msg as unknown as Record<string, unknown>).reasoning = data.message.thinking;
 
   return {
     id: `chatcmpl-${Date.now()}`,
@@ -239,6 +241,7 @@ export async function routeInference(
   traceId?: string,
 ): Promise<ChatCompletionResponse> {
   if (_kernel?.isReady()) {
+    const kernelStart = Date.now();
     try {
       const result = await _kernel.call('inference.route', {
         model: req.model,
@@ -247,7 +250,26 @@ export async function routeInference(
         max_tokens: req.max_tokens || req.max_completion_tokens,
         stream: false,
         trace_id: traceId,
+        purpose: (req as Record<string, unknown>).purpose,
       }) as ChatCompletionResponse;
+
+      const latencyMs = Date.now() - kernelStart;
+      const provider = result._opseeq?.provider || 'kernel';
+      recordSuccess(provider, latencyMs, result.usage ? {
+        prompt_tokens: result.usage.prompt_tokens,
+        completion_tokens: result.usage.completion_tokens,
+      } : undefined);
+      recordArtifact({
+        id: result.id || `k-${Date.now()}`,
+        model: result.model || req.model,
+        provider,
+        latencyMs,
+        tokens: result.usage ? { input: result.usage.prompt_tokens, output: result.usage.completion_tokens } : null,
+        success: true,
+        timestamp: new Date().toISOString(),
+        traceId: traceId || null,
+      });
+
       return result;
     } catch (err) {
       console.log(`[kernel] inference.route failed, falling back to Node: ${err instanceof Error ? err.message : err}`);

@@ -1,6 +1,6 @@
 {
   "name": "opseeq-service",
-  "version": "1.0.0",
+  "version": "5.0.0",
   "description": "Opseeq AI Agent Gateway — unified inference proxy with MCP for agentic use",
   "type": "module",
   "main": "dist/index.js",

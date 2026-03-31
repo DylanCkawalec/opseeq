@@ -22,8 +22,8 @@ services:
       context: .
       dockerfile: Dockerfile.service
       tags:
-        - opseeq:latest
-    image: opseeq:latest
+        - opseeq:v5
+    image: opseeq:v5
     container_name: opseeq
     init: true
     stop_grace_period: 10s

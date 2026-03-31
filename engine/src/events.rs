@@ -48,6 +48,16 @@ pub enum RuntimeEvent {
         path: String,
         repos_found: u32,
     },
+    QualityScored {
+        trace_id: String,
+        provider: String,
+        model: String,
+        score: f64,
+        tau_tier: String,
+        tau_threshold: f64,
+        passed: bool,
+        latency_ms: u64,
+    },
 }
 
 static EVENTS_ENABLED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();

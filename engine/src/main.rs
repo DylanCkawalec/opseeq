@@ -11,7 +11,7 @@ mod types;
 use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
-#[command(name = "opseeq-core", version = "0.1.0")]
+#[command(name = "opseeq-core", version = "5.0.0")]
 #[command(about = "Deterministic runtime kernel for Opseeq local-first intelligence")]
 struct Cli {
     #[command(subcommand)]
