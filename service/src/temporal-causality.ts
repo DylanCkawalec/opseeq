@@ -1,11 +1,20 @@
+/**
+ * @module temporal-causality — Causal Event Ledger
+ *
+ * Axiom A8: Every significant pipeline event is recorded with a causal parent link.
+ * Postulate P7: Events are append-only — the JSONL log is an immutable audit trail.
+ * Corollary C6: The causality tree can reconstruct the full decision history for any taskId.
+ * Behavioral Contract: appendTemporalEvent() writes atomically; buildTemporalCausalityTree() is read-only.
+ * Tracing Invariant: Log file at ~/.opseeq-superior/logs/temporal-causality.jsonl.
+ */
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { writeImmutableArtifact } from './trace-sink.js';
 
-const GODMODE_ROOT = path.join(os.homedir(), '.opseeq-superior');
-const LOG_DIR = path.join(GODMODE_ROOT, 'logs');
+const PRECISION_ROOT = path.join(os.homedir(), '.opseeq-superior');
+const LOG_DIR = path.join(PRECISION_ROOT, 'logs');
 const CAUSALITY_LOG = path.join(LOG_DIR, 'temporal-causality.jsonl');
 
 export type TemporalActor = 'human' | 'nemoclaw' | 'mermate' | 'lucidity' | 'general-clawd' | 'opseeq';

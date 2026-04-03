@@ -1,6 +1,25 @@
+/**
+ * @module mermate-lucidity-ooda — Precision Orchestration Pipeline
+ *
+ * Scientific OODA Engine for the Opseeq control plane.
+ *
+ * Axiom A1: The language model is policy, not system.
+ * Axiom A2: Human-authored invariants (axioms, postulates, corollaries, lemmas) are supreme.
+ * Axiom A3: Local-first execution is mandatory unless explicitly approved otherwise.
+ * Postulate P1: Every pipeline stage produces immutable, hash-addressed artifacts with provenance.
+ * Corollary C1: No effectful execution occurs before plan, ranking, risk, and permission are complete.
+ * Lemma L1: The pipeline path is: intent → fractal context → OODA cycle → Mermate MAX → Lucidity polish → approval → formal spec → codegen.
+ *
+ * Behavioral Contract:
+ *   - orchestratePrecisionPipeline() returns a PrecisionPipelineResult without side-effects when approved=false.
+ *   - Stage results are append-only and immutable once written to the trace sink.
+ *   - The Living Architecture Graph is updated atomically at pipeline completion.
+ *
+ * Tracing Invariant: Every temporal causality event includes taskId, actor, kind, and approval state.
+ */
 import type { ServiceConfig } from './config.js';
 import { buildFractalContextWindow, renderFractalContextText } from './fractal-context.js';
-import { getGodModeRoutingDefaults, getExtensionsForTarget } from './extension-registry.js';
+import { getPrecisionOrchestrationRoutingDefaults, getExtensionsForTarget } from './extension-registry.js';
 import { syncLivingArchitectureGraph } from './living-architecture-graph.js';
 import { runMetaCritique } from './meta-critique.js';
 import { buildOodaCycle } from './ooda-primitives.js';
@@ -10,7 +29,7 @@ import { writeImmutableArtifact } from './trace-sink.js';
 const MERMATE_URL = (process.env.MERMATE_URL || 'http://127.0.0.1:3333').replace(/\/+$/, '');
 const LUCIDITY_URL = (process.env.LUCIDITY_URL || 'http://127.0.0.1:4173').replace(/\/+$/, '');
 
-export interface GodModePipelineInput {
+export interface PrecisionPipelineInput {
   intent: string;
   repoPath?: string;
   appId?: string;
@@ -26,16 +45,16 @@ export interface GodModePipelineInput {
   allowModelCritique?: boolean;
 }
 
-export interface GodModeStageResult {
+export interface PrecisionStageResult {
   stage: string;
-  service: 'nemoclaw' | 'mermate' | 'lucidity' | 'general-clawd' | 'opseeq';
+  service: 'nemoclaw' | 'mermate' | 'lucidity' | 'opseeq';
   status: 'planned' | 'pending_approval' | 'ready' | 'executed' | 'blocked' | 'unavailable';
   summary: string;
   durationMs: number;
   details?: Record<string, unknown>;
 }
 
-export interface GodModePipelineResult {
+export interface PrecisionPipelineResult {
   taskId: string;
   generatedAt: string;
   title: string;
@@ -62,7 +81,7 @@ export interface GodModePipelineResult {
     networkScope: string[];
     terminalTarget: string;
   };
-  stageResults: GodModeStageResult[];
+  stageResults: PrecisionStageResult[];
   critique: Awaited<ReturnType<typeof runMetaCritique>>;
   artifacts: Array<{ id: string; kind: string; hash: string; path: string }>;
 }
@@ -93,10 +112,10 @@ function deriveTitle(intent: string): string {
   return head.length <= 88 ? head : `${head.slice(0, 85)}...`;
 }
 
-export async function orchestrateGodModePipeline(input: GodModePipelineInput, config: ServiceConfig): Promise<GodModePipelineResult> {
-  const taskId = `god-${Date.now().toString(36)}`;
+export async function orchestratePrecisionPipeline(input: PrecisionPipelineInput, config: ServiceConfig): Promise<PrecisionPipelineResult> {
+  const taskId = `prec-${Date.now().toString(36)}`;
   const target = input.appId || 'all';
-  const routing = getGodModeRoutingDefaults(target);
+  const routing = getPrecisionOrchestrationRoutingDefaults(target);
   const primaryModel = input.localModel || routing.plannerModel || 'gpt-oss:20b';
   const extensionPacks = getExtensionsForTarget(target);
 
@@ -161,14 +180,14 @@ export async function orchestrateGodModePipeline(input: GodModePipelineInput, co
     actor: 'human',
     kind: 'approve',
     summary: input.approved
-      ? 'Human approval is present for the current God-mode scope.'
+      ? 'Human approval is present for the current precision orchestration scope.'
       : 'Approval is still pending before the effectful stages may execute.',
     approvalState: input.approved ? 'approved' : 'pending',
     metadata: { approved: Boolean(input.approved), execute: Boolean(input.execute) },
   });
 
   const mermateAssessment = {
-    summary: `Primary local workhorse: ${primaryModel}. Use Mermate MAX render to turn the idea into a god-level architecture, then route through Lucidity for cleanup and comparison before approval.`,
+    summary: `Primary local workhorse: ${primaryModel}. Use Mermate MAX render to produce a maximal-precision architecture, then route through Lucidity for cleanup and comparison before approval.`,
     endpoint: `${MERMATE_URL}/api/render`,
     mode: input.maxMode === false ? 'standard' : 'max',
   };
@@ -187,7 +206,7 @@ export async function orchestrateGodModePipeline(input: GodModePipelineInput, co
     ],
   };
 
-  const stageResults: GodModeStageResult[] = [
+  const stageResults: PrecisionStageResult[] = [
     {
       stage: 'observe_orient',
       service: 'nemoclaw',
@@ -231,10 +250,10 @@ export async function orchestrateGodModePipeline(input: GodModePipelineInput, co
       },
     },
     {
-      stage: 'general_clawd_execution',
-      service: 'general-clawd',
+      stage: 'execution_runtime',
+      service: 'opseeq',
       status: input.approved ? 'ready' : 'pending_approval',
-      summary: 'Execution remains inside iTerm2/tmux under the approved envelope.',
+      summary: 'Execution via absorbed runtime (General-Clawd eliminated) inside iTerm2/tmux under the approved envelope.',
       durationMs: 0,
     },
   ];
@@ -356,7 +375,7 @@ export async function orchestrateGodModePipeline(input: GodModePipelineInput, co
   }
 
   const critique = await runMetaCritique({
-    objective: 'Critique the God-mode Mermate -> Lucidity -> approval -> TLA+/TS/Rust orchestration artifact.',
+    objective: 'Critique the Precision Orchestration Mermate -> Lucidity -> approval -> TLA+/TS/Rust pipeline artifact.',
     artifactText: JSON.stringify({ ooda, stageResults, mermateAssessment, lucidityReview }, null, 2),
     preferredModel: primaryModel,
     config,
@@ -372,24 +391,24 @@ export async function orchestrateGodModePipeline(input: GodModePipelineInput, co
     approvalState: 'not_required',
     metadata: { artifactId: critiqueArtifact.id, score: critique.score },
   });
-  appendTemporalEvent({
-    taskId,
-    parentId: null,
-    actor: 'nemoclaw',
-    kind: 'validate',
-    summary: 'Validated the orchestration plan, critique outcome, and stage inventory.',
-    approvalState: 'not_required',
-    metadata: { critiqueScore: critique.score, stages: stageResults.length },
-  });
 
   const graphSync = syncLivingArchitectureGraph({
     taskId,
     intent: input.intent,
     appId: input.appId || null,
+    repoPath: input.repoPath || null,
     extensionIds: extensionPacks.map((pack) => pack.id),
     planSteps: ooda.detailedPlan,
     critiqueSummary: critique.summary,
+    stageResults: stageResults.map((stage) => ({
+      stage: stage.stage,
+      service: stage.service,
+      status: stage.status,
+      summary: stage.summary,
+      details: stage.details,
+    })),
   });
+
   appendTemporalEvent({
     taskId,
     parentId: null,

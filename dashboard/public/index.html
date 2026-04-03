@@ -73,6 +73,13 @@
       </div>
     </div>
 
+    <div class="sidebar-section">
+      <div class="sidebar-label">Connected Repos</div>
+      <div id="sidebar-repos" class="sidebar-repos-list">
+        <div class="sidebar-item"><span class="dot gray"></span><span class="label">Scanning...</span></div>
+      </div>
+    </div>
+
     <div class="sidebar-section" style="margin-top:auto;">
       <div class="sidebar-label">Gateway</div>
       <div class="sidebar-item" style="font-family:monospace; font-size:11px; color:var(--text-dim);">
@@ -89,6 +96,8 @@
         <p class="session-hint session-hint-dash" id="session-hint-dash" hidden>Close every Opseeq tab to end this session.</p>
         <div class="view-tabs" role="tablist" aria-label="Dashboard views">
           <button class="view-tab active" data-view-target="overview" type="button">Overview</button>
+          <button class="view-tab" data-view-target="precision" type="button">Precision Orchestration</button>
+          <button class="view-tab" data-view-target="graph" type="button">Living Graph</button>
           <button class="view-tab" data-view-target="nemoclaw" type="button">NemoClaw</button>
           <button class="view-tab" data-view-target="models" type="button">Models</button>
         </div>
@@ -191,6 +200,133 @@
           <button class="btn-primary" style="padding:10px 20px; font-size:13px;" id="btn-connect">Generate</button>
         </div>
         <div class="plugin-output" id="plugin-output"></div>
+      </div>
+    </section>
+
+    <!-- ── Precision Orchestration ──────────────────────────────── -->
+    <section class="view-panel" data-view="precision" hidden>
+      <div class="precision-hero">
+        <button class="btn-precision" id="btn-precision-run" type="button">
+          <span class="precision-icon">&#9889;</span>
+          Precision Orchestration &mdash; Full Pipeline
+        </button>
+        <p class="precision-sub">Mermate MAX &rarr; Lucidity Cleanup &rarr; TLA+ &rarr; TypeScript &rarr; Rust &rarr; .app</p>
+      </div>
+
+      <div class="precision-split">
+        <!-- White Pane: Planning -->
+        <div class="precision-pane precision-white">
+          <div class="pane-header"><span class="pane-dot white"></span> White Pane &mdash; Planning</div>
+          <div class="precision-idea-box" id="precision-idea-box">
+            <textarea class="precision-textarea" id="precision-input" placeholder="Drop an idea, paste markdown, or drag a .mmd file here..."></textarea>
+          </div>
+          <div class="ooda-ring-wrapper">
+            <svg class="ooda-ring" viewBox="0 0 120 120">
+              <circle class="ooda-track" cx="60" cy="60" r="52"/>
+              <circle class="ooda-progress" id="ooda-progress" cx="60" cy="60" r="52" stroke-dasharray="326.7" stroke-dashoffset="326.7"/>
+              <text x="60" y="56" class="ooda-label">OODA</text>
+              <text x="60" y="72" class="ooda-stage" id="ooda-stage-label">Idle</text>
+            </svg>
+            <div class="ooda-stages">
+              <span class="ooda-step" id="ooda-observe">Observe</span>
+              <span class="ooda-step" id="ooda-orient">Orient</span>
+              <span class="ooda-step" id="ooda-decide">Decide</span>
+              <span class="ooda-step" id="ooda-act">Act</span>
+            </div>
+          </div>
+          <div class="precision-plan" id="precision-plan">
+            <div class="empty-state">Plan will appear after pipeline starts.</div>
+          </div>
+        </div>
+
+        <!-- Black Pane: Execution -->
+        <div class="precision-pane precision-black">
+          <div class="pane-header"><span class="pane-dot black"></span> Black Pane &mdash; Execution</div>
+          <div class="precision-stages" id="precision-stages">
+            <div class="empty-state">Stages appear as the pipeline runs.</div>
+          </div>
+          <pre class="terminal-output precision-output" id="precision-output">Awaiting pipeline execution...</pre>
+        </div>
+      </div>
+
+      <!-- Cross-Repo Search -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-icon control">&#128269;</div>
+          <div>
+            <div class="card-title">Cross-Repo Search</div>
+            <div class="card-subtitle">Search logical steps across all connected repos (Lucidity &amp; Mermate prioritized)</div>
+          </div>
+        </div>
+        <div class="plugin-input-row">
+          <input type="text" class="plugin-input" id="crossrepo-search-input" placeholder="Search axioms, lemmas, artifacts...">
+          <button class="btn-primary" style="padding:10px 20px; font-size:13px;" id="btn-crossrepo-search">Search</button>
+        </div>
+        <div class="crossrepo-results" id="crossrepo-results"></div>
+      </div>
+    </section>
+
+    <!-- ── Living Graph ──────────────────────────────── -->
+    <section class="view-panel" data-view="graph" hidden>
+      <div class="nemoclaw-grid">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-icon kernel">G</div>
+            <div>
+              <div class="card-title">Living Architecture Graph</div>
+              <div class="card-subtitle">Unified versioned graph spanning all repos</div>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="card-stat"><span class="key">Nodes</span><span class="val" id="graph-nodes">--</span></div>
+            <div class="card-stat"><span class="key">Edges</span><span class="val" id="graph-edges">--</span></div>
+            <div class="card-stat"><span class="key">Repos</span><span class="val" id="graph-repos">--</span></div>
+            <div class="card-stat"><span class="key">Versions</span><span class="val" id="graph-versions">--</span></div>
+            <div class="card-stat"><span class="key">Backlinks</span><span class="val" id="graph-backlinks">--</span></div>
+          </div>
+          <div class="action-row">
+            <button class="btn-open" type="button" id="btn-graph-refresh">Refresh Index</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <div class="card-icon" style="background:#FFD70022;color:#FFD700;">&#9733;</div>
+            <div>
+              <div class="card-title">Priority Repos</div>
+              <div class="card-subtitle">Lucidity &amp; Mermate deep index status</div>
+            </div>
+          </div>
+          <div id="graph-priority-repos" class="sandbox-list">
+            <div class="empty-state">Loading priority repos...</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-icon control">&#128200;</div>
+          <div>
+            <div class="card-title">Graph Viewer</div>
+            <div class="card-subtitle">Visual representation of the Living Architecture Graph (Mermaid diagram)</div>
+          </div>
+        </div>
+        <div class="graph-viewer" id="graph-viewer">
+          <div class="empty-state">Click &ldquo;Refresh Index&rdquo; to load the graph visualization.</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-icon control">&#128196;</div>
+          <div>
+            <div class="card-title">Recent Versions</div>
+            <div class="card-subtitle">Immutable version history of graph updates</div>
+          </div>
+        </div>
+        <div class="sandbox-list" id="graph-version-list">
+          <div class="empty-state">No versions recorded yet.</div>
+        </div>
       </div>
     </section>
 
@@ -347,5 +483,6 @@
 <script src="/js/session.js"></script>
 <script src="/js/landing.js"></script>
 <script src="/js/app.js"></script>
+<script src="/js/precision-orchestration.js"></script>
 </body>
 </html>

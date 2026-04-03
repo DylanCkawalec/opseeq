@@ -1,3 +1,4 @@
+mod anthropic;
 mod chat;
 mod config;
 mod events;

@@ -1,11 +1,21 @@
 /**
- * Opseeq v5 — Self-Improvement Feedback Loop + TraceRank-Aligned Observability
+ * @module feedback — Self-improvement loop + TraceRank observability
  *
- * Implements the whitepaper's observability concepts:
- * - Concentration Score C(z) = 1 - H(z)/log(d) — measures routing diversity
- * - Tau thresholds (τ_e=0.7, τ_p=0.85, τ_d=0.9) — quality gates
- * - Adaptive routing scores from EMA of latency + success rate
- * - Artifact-style immutable trace records per inference call
+ * **Axiom A1 — EMA stability** — Latency and success-rate EMAs use fixed `EMA_ALPHA` for bounded
+ * memory and smooth updates across requests.
+ * **Axiom A2 — Tau gates** — `TAU.explore|production|deploy` thresholds are environment-overridable
+ * but default to whitepaper HPC-GoT values.
+ * **Postulate P1 — TraceRank concentration** — C(z) = 1 − H(z)/log(d) summarizes provider entropy;
+ * exposed in `getFeedbackSnapshot` for dashboards.
+ * **Postulate P2 — Adaptive ranking** — `getAdaptiveRanking` orders providers by `adaptiveScore`;
+ * `getBestProvider` returns null unless the leader is separated and has minimum sample size.
+ * **Corollary C1 — Optional routing** — `provider-resolution` may consult `getBestProvider` only when
+ * `OPSEEQ_ADAPTIVE_ROUTING=true` and the leader can serve the requested model.
+ * **Lemma L1 — Artifact ring** — Recent inference artifacts are stored in a fixed-size ring buffer
+ * for `/api/artifacts` and status counts.
+ * **Behavioral contract** — `recordSuccess` / `recordFailure` are side-effecting; `getFeedbackSnapshot`
+ * is read-only and safe to call from any route.
+ * **Tracing invariant** — Provider keys are logical names (e.g. `openai`, `kernel`), not API base URLs.
  */
 
 // ── Tau thresholds from whitepaper HPC-GoT specification ─────────
@@ -86,6 +96,7 @@ export function getAdaptiveRanking(): Array<{ provider: string; score: number; m
     .sort((a, b) => b.score - a.score);
 }
 
+/** When `OPSEEQ_ADAPTIVE_ROUTING=true`, `provider-resolution` may prefer this provider if it can serve the model. */
 export function getBestProvider(): string | null {
   const ranking = getAdaptiveRanking();
   if (ranking.length === 0) return null;

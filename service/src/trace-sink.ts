@@ -1,10 +1,19 @@
+/**
+ * @module trace-sink — Immutable Artifact Ledger
+ *
+ * Axiom A9: Every artifact is content-addressed (SHA-256) and immutable once written.
+ * Postulate P8: Artifacts are keyed by (kind, taskId) and stored under ~/.opseeq-superior/artifacts/.
+ * Corollary C7: listImmutableArtifacts() returns artifacts in reverse-chronological order.
+ * Behavioral Contract: writeImmutableArtifact() is idempotent — duplicate writes produce the same hash.
+ * Tracing Invariant: Artifact path encodes kind and taskId for O(1) lookup.
+ */
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-const GODMODE_ROOT = path.join(os.homedir(), '.opseeq-superior');
-const ARTIFACT_ROOT = path.join(GODMODE_ROOT, 'artifacts');
+const PRECISION_ROOT = path.join(os.homedir(), '.opseeq-superior');
+const ARTIFACT_ROOT = path.join(PRECISION_ROOT, 'artifacts');
 
 export interface ImmutableArtifact<T = unknown> {
   id: string;

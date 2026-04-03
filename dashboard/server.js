@@ -22,7 +22,7 @@ const GATEWAY = process.env.OPSEEQ_GATEWAY_URL || 'http://127.0.0.1:9090';
 const SESSION_SHUTDOWN = process.env.OPSEEQ_SESSION_SHUTDOWN === '1';
 const OPSEEQ_ROOT = path.resolve(__dirname, '..');
 const NEMOCLAW_CLI = path.join(OPSEEQ_ROOT, 'bin', 'nemoclaw.js');
-const GENERAL_CLAWD_ROOT = process.env.GENERAL_CLAWD_ROOT || path.resolve(OPSEEQ_ROOT, '..', 'General-Clawd');
+// NOTE: GENERAL_CLAWD_ROOT bridge eliminated — execution runtime is now absorbed into Opseeq (service/src/execution-runtime.ts)
 const PTY_BRIDGE = path.join(__dirname, 'scripts', 'pty_bridge.py');
 const SANDBOX_NAME_PATTERN = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/;
 
@@ -60,9 +60,10 @@ function buildTerminalSpec(profile, payload) {
         command: `cd ${shellQuote(OPSEEQ_ROOT)} && printf '%s\n' 'Opseeq workspace ready.' 'Repo: ${OPSEEQ_ROOT}' '' 'Use this shell for local commands.' '' && exec /bin/sh`,
       };
     case 'general-clawd':
+    case 'execution-runtime':
       return {
-        label: 'General-Clawd Shell',
-        command: `cd ${shellQuote(GENERAL_CLAWD_ROOT)} && printf '%s\n' 'General-Clawd workspace ready.' 'Repo: ${GENERAL_CLAWD_ROOT}' '' 'Suggested commands:' '  PYTHONPATH=. python3 -m src.main summary' '  PYTHONPATH=. python3 -m src.main tool-pool' '' && exec /bin/sh`,
+        label: 'Execution Runtime Shell (absorbed)',
+        command: `cd ${shellQuote(OPSEEQ_ROOT)} && printf '%s\n' 'Opseeq Execution Runtime (General-Clawd absorbed).' 'Repo: ${OPSEEQ_ROOT}' '' 'The execution runtime is now native to Opseeq.' 'See: service/src/execution-runtime.ts' '' && exec /bin/sh`,
       };
     case 'nemoclaw-connect': {
       const sandboxName = validateSandboxName(payload.sandboxName);
@@ -371,7 +372,7 @@ wss.on('connection', (ws) => {
 
 terminalWss.on('connection', (ws) => {
   const bridge = new TerminalBridge(ws);
-  bridge.send({ type: 'ready', scriptAvailable: Boolean(PYTHON_BIN), generalClawdRoot: GENERAL_CLAWD_ROOT });
+  bridge.send({ type: 'ready', scriptAvailable: Boolean(PYTHON_BIN), executionRuntimeAbsorbed: true });
 
   ws.on('message', (raw) => {
     try {

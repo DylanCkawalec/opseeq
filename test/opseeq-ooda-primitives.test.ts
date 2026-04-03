@@ -34,7 +34,7 @@ describe('buildOodaCycle', () => {
       allowRemoteAugmentation: true,
     });
 
-    expect(localOnly.rankedActions.find((action) => action.id === 'creativity-full-godmode')?.networkScope).toEqual([]);
-    expect(remoteEnabled.rankedActions.find((action) => action.id === 'creativity-full-godmode')?.networkScope).toContain('https://api.anthropic.com/*');
+    expect(localOnly.rankedActions.find((action) => action.id === 'creativity-full-precision')?.networkScope).toEqual([]);
+    expect(remoteEnabled.rankedActions.find((action) => action.id === 'creativity-full-precision')?.networkScope).toContain('https://api.anthropic.com/*');
   });
 });

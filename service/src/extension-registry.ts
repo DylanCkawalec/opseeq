@@ -1,3 +1,11 @@
+/**
+ * @module extension-registry — Precision Orchestration Extension Packs
+ *
+ * Axiom A4: Extension packs are declarative, stateless capability descriptors.
+ * Postulate P2: Each extension targets a specific service or 'all' and declares trust boundary.
+ * Corollary C2: outOfTrust extensions require explicit human approval before activation.
+ * Behavioral Contract: getPrecisionOrchestrationRoutingDefaults() returns deterministic routing for any target.
+ */
 export interface ExtensionPack {
   id: string;
   label: string;
@@ -24,7 +32,7 @@ const EXTENSION_PACKS: ExtensionPack[] = [
     targets: ['mermate', 'all'],
     defaultModel: 'gpt-oss:20b',
     purpose: 'Make the Mermate -> Lucidity -> approval -> formal-spec pipeline first-class.',
-    capabilities: ['idea-assessment', 'god-architecture', 'tla-bridge', 'ts-bridge', 'rust-bridge'],
+    capabilities: ['idea-assessment', 'precision-architecture', 'tla-bridge', 'ts-bridge', 'rust-bridge'],
     outOfTrust: false,
   },
   {
@@ -54,6 +62,33 @@ const EXTENSION_PACKS: ExtensionPack[] = [
     capabilities: ['whitepaper-law', 'ooda-constraints', 'formal-reference'],
     outOfTrust: false,
   },
+  {
+    id: 'lucidity-cross-repo',
+    label: 'Lucidity Cross-Repo Awareness',
+    targets: ['lucidity', 'all'],
+    defaultModel: 'gpt-oss:20b',
+    purpose: 'Deep indexing and cross-referencing of the Lucidity repository including .env health, service endpoints, and logical step discovery.',
+    capabilities: ['lucidity-index', 'env-health-probe', 'cross-repo-search', 'endpoint-map'],
+    outOfTrust: false,
+  },
+  {
+    id: 'mermate-cross-repo',
+    label: 'Mermate Cross-Repo Awareness',
+    targets: ['mermate', 'all'],
+    defaultModel: 'gpt-oss:20b',
+    purpose: 'Deep indexing and cross-referencing of the Mermate/mermaid repository including HPC-GoT config, agent ensemble, and .env health.',
+    capabilities: ['mermate-index', 'env-health-probe', 'got-config-parse', 'agent-ensemble-map', 'cross-repo-search'],
+    outOfTrust: false,
+  },
+  {
+    id: 'cross-repo-env-monitor',
+    label: 'Cross-Repo .env Monitor',
+    targets: ['all'],
+    defaultModel: 'gpt-oss:20b',
+    purpose: 'Continuous monitoring, backup, and health reporting for .env files across all connected repositories.',
+    capabilities: ['env-discovery', 'env-backup', 'env-health-dashboard', 'key-redaction'],
+    outOfTrust: false,
+  },
 ];
 
 export function getExtensionRegistry(): ExtensionPack[] {
@@ -65,7 +100,7 @@ export function getExtensionsForTarget(target: string): ExtensionPack[] {
   return getExtensionRegistry().filter((pack) => pack.targets.includes('all') || pack.targets.includes(safeTarget));
 }
 
-export function getGodModeRoutingDefaults(target?: string): { plannerModel: string; executionModel: string; extensionIds: string[] } {
+export function getPrecisionOrchestrationRoutingDefaults(target?: string): { plannerModel: string; executionModel: string; extensionIds: string[] } {
   const targetExtensions = target ? getExtensionsForTarget(target) : getExtensionsForTarget('all');
   return {
     plannerModel: 'gpt-oss:20b',

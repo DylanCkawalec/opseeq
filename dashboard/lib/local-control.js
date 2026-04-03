@@ -16,7 +16,7 @@ const APP_REGISTRY_FILE = path.join(CONTROL_DIR, 'apps.json');
 const NEMOCLAW_REGISTRY_FILE = path.join(HOME, '.nemoclaw', 'sandboxes.json');
 const NEMOCLAW_CLI = path.join(OPSEEQ_ROOT, 'bin', 'nemoclaw.js');
 const MERMAID_EXTENSION_PATH = process.env.MERMATE_EXTENSION_PATH || path.resolve(OPSEEQ_ROOT, '..', 'gpt-oss', 'gpt_oss', 'extensions', 'mermaid_enhancer');
-const MERMATE_GODMODE_PATH = path.join(OPSEEQ_ROOT, 'service', 'src', 'mermate-lucidity-ooda.ts');
+const MERMATE_PRECISION_PATH = path.join(OPSEEQ_ROOT, 'service', 'src', 'mermate-lucidity-ooda.ts');
 const LIVING_GRAPH_PATH = path.join(OPSEEQ_ROOT, 'service', 'src', 'living-architecture-graph.ts');
 const LUCIDITY_EXTENSION_PATH = process.env.LUCIDITY_REPO || path.resolve(OPSEEQ_ROOT, '..', 'Lucidity');
 const OPSEEQ_DOCS_PATH = path.join(OPSEEQ_ROOT, 'docs', 'wp');
@@ -217,9 +217,9 @@ function buildExtensionCatalog() {
     {
       id: 'mermate-max-ooda',
       label: 'Mermate MAX OODA',
-      description: 'God-mode Mermate orchestration pack for idea assessment, MAX render, and the TLA+/TS/Rust bridge.',
-      path: MERMATE_GODMODE_PATH,
-      exists: exists(MERMATE_GODMODE_PATH),
+      description: 'Precision Orchestration Mermate pack for idea assessment, MAX render, and the TLA+/TS/Rust bridge.',
+      path: MERMATE_PRECISION_PATH,
+      exists: exists(MERMATE_PRECISION_PATH),
     },
     {
       id: 'lucidity-semantic-polish',

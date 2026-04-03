@@ -1,5 +1,5 @@
 version: 1
-name: nemoclaw-godmode-default
+name: nemoclaw-precision-orchestration-default
 mode: deny_and_ask
 whitepaper_law:
   local_first: true

@@ -20,15 +20,15 @@ afterEach(() => {
   }
 });
 
-describe('orchestrateGodModePipeline', () => {
-  it('builds a non-executing God-mode plan with graph, causality, and immutable artifacts', async () => {
-    const home = makeTempHome('opseeq-godmode-home-');
+describe('orchestratePrecisionPipeline', () => {
+  it('builds a non-executing precision orchestration plan with graph, causality, and immutable artifacts', async () => {
+    const home = makeTempHome('opseeq-precision-home-');
     process.env.HOME = home;
     vi.resetModules();
 
-    const { orchestrateGodModePipeline } = await import('../service/src/mermate-lucidity-ooda');
+    const { orchestratePrecisionPipeline } = await import('../service/src/mermate-lucidity-ooda');
 
-    const result = await orchestrateGodModePipeline({
+    const result = await orchestratePrecisionPipeline({
       intent: 'Simple idea to formal architecture and desktop app.',
       repoPath: '/Users/dylanckawalec/Desktop/developer/opseeq',
       appId: 'mermate',

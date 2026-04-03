@@ -1,3 +1,19 @@
+/**
+ * @module index — Opseeq HTTP gateway (Express)
+ *
+ * **Axiom A1 — Compatibility** — Public routes, JSON shapes, and status codes remain stable across
+ * releases unless explicitly versioned elsewhere.
+ * **Axiom A2 — Rate limiting** — Per-IP sliding window with bounded bucket map; overflow eviction
+ * uses random sampling (no full sort).
+ * **Postulate P1 — Idempotency** — `Idempotency-Key` deduplicates non-streaming completions; LRU
+ * bounds memory; optional body hash via `OPSEEQ_IDEMPOTENCY_BODY_HASH` for stricter keys.
+ * **Postulate P2 — Status aggregation** — `/api/status` batches independent subsystems via
+ * `Promise.all` (models, probes, graph snapshot, precision metadata, artifacts).
+ * **Corollary C1 — Graph read path** — `getCachedLivingGraph` TTL-caches `getLivingArchitectureGraph`
+ * to avoid redundant disk parse under bursty dashboard traffic.
+ * **Lemma L1 — Shutdown** — SIGTERM/SIGINT drain HTTP; kernel child stopped; idle exit when enabled.
+ * **Tracing invariant** — `x-request-id` (or generated UUID) attached per request for log correlation.
+ */
 import express from 'express';
 import cors from 'cors';
 import crypto from 'node:crypto';
@@ -11,13 +27,51 @@ import { KernelClient } from './kernel.js';
 import { openAppSurface, AppLauncherError } from './app-launcher.js';
 import { connectRepo, RepoConnectError } from './repo-connect.js';
 import { getNemoClawOverview, NemoClawControlError, runNemoClawAction, setNemoClawDefaultSandbox } from './nemoclaw-control.js';
-import { getExtensionRegistry, getGodModeRoutingDefaults } from './extension-registry.js';
-import { getLivingArchitectureGraph } from './living-architecture-graph.js';
-import { orchestrateGodModePipeline } from './mermate-lucidity-ooda.js';
+import { getExtensionRegistry, getPrecisionOrchestrationRoutingDefaults } from './extension-registry.js';
+import { buildLivingArchitectureDashboard, getLivingArchitectureGraph, getLivingArchitectureNode, queryLivingArchitectureGraph, refreshLivingArchitectureGraphIndex, type LivingArchitectureQueryOptions } from './living-architecture-graph.js';
+import { orchestratePrecisionPipeline } from './mermate-lucidity-ooda.js';
 import { listImmutableArtifacts } from './trace-sink.js';
+import { getAbsorptionStatus, bootstrapSession, routePrompt, assembleToolPool, listSessions, persistSession } from './execution-runtime.js';
+import { createAdaptiveSession, executeInPane, getPipelineStatus, canExecuteStage, getMermateVendorStatus, verifyTlaPlus, PIPELINE_STAGES } from './iterm2-adaptive-plug.js';
+import { delegateTask, assessCapabilities, getOrchestratorDashboard, buildCrossRepoOptimizationTask, getActiveTasks as getActiveSubagentTasks, getTask as getSubagentTask } from './windsurf-subagent-orchestrator.js';
 import type { ChatCompletionRequest } from './router.js';
+import { getEmbeddingProvider } from './provider-resolution.js';
 
 const config = loadConfig();
+
+const IDEMPOTENCY_CACHE_MAX = Math.max(1, parseInt(process.env.OPSEEQ_IDEMPOTENCY_CACHE_MAX || '500', 10));
+
+/** LRU-ish: Map insertion order + delete-on-get refresh. Bounded by `IDEMPOTENCY_CACHE_MAX`. */
+const idempotencyCache = new Map<string, { result: unknown; expiresAt: number }>();
+
+function idempotencyStorageKey(idempotencyKey: string, body: unknown): string {
+  if (process.env.OPSEEQ_IDEMPOTENCY_BODY_HASH === 'true') {
+    const h = crypto.createHash('sha256').update(JSON.stringify(body)).digest('hex').slice(0, 32);
+    return `${idempotencyKey}|${h}`;
+  }
+  return idempotencyKey;
+}
+
+function idempotencyGet(key: string): { result: unknown; expiresAt: number } | undefined {
+  const v = idempotencyCache.get(key);
+  if (!v || Date.now() >= v.expiresAt) {
+    if (v) idempotencyCache.delete(key);
+    return undefined;
+  }
+  idempotencyCache.delete(key);
+  idempotencyCache.set(key, v);
+  return v;
+}
+
+function idempotencySet(key: string, result: unknown): void {
+  const expiresAt = Date.now() + 3600_000;
+  if (idempotencyCache.has(key)) idempotencyCache.delete(key);
+  idempotencyCache.set(key, { result, expiresAt });
+  while (idempotencyCache.size > IDEMPOTENCY_CACHE_MAX) {
+    const first = idempotencyCache.keys().next().value;
+    if (first !== undefined) idempotencyCache.delete(first);
+  }
+}
 const app = express();
 
 app.use(cors());
@@ -50,10 +104,14 @@ function rateLimit(req: express.Request, res: express.Response, next: express.Ne
   // Evict expired + cap size to prevent memory exhaustion
   if (rateBuckets.size > MAX_RATE_BUCKETS) {
     for (const [k, b] of rateBuckets) { if (now >= b.resetAt) rateBuckets.delete(k); }
-    // If still over limit after expiry sweep, drop oldest 25%
+    // If still over limit after expiry sweep, drop ~25% at random (O(1) per eviction vs full sort)
     if (rateBuckets.size > MAX_RATE_BUCKETS) {
-      const entries = [...rateBuckets.entries()].sort((a, b) => a[1].resetAt - b[1].resetAt);
-      for (let i = 0; i < entries.length * 0.25; i++) rateBuckets.delete(entries[i][0]);
+      const drop = Math.ceil(rateBuckets.size * 0.25);
+      for (let i = 0; i < drop; i++) {
+        const keys = [...rateBuckets.keys()];
+        if (keys.length === 0) break;
+        rateBuckets.delete(keys[Math.floor(Math.random() * keys.length)]);
+      }
     }
   }
   let bucket = rateBuckets.get(ip);
@@ -82,8 +140,8 @@ const MERMATE_URL = (process.env.MERMATE_URL || 'http://127.0.0.1:3333').replace
 const SYNTH_URL = (process.env.SYNTHESIS_TRADE_URL || 'http://127.0.0.1:8420').replace(/\/+$/, '');
 const OLLAMA_URL = (process.env.OLLAMA_URL || process.env.LOCAL_LLM_BASE_URL || '').replace(/\/+$/, '');
 const DEFAULT_OLLAMA_MODEL = process.env.OLLAMA_MODEL || process.env.LOCAL_LLM_MODEL || 'gpt-oss:20b';
-const GODMODE_PROMPT_PATH = path.resolve(process.cwd(), '..', 'config', 'nemoclaw-godmode.system-prompt.md');
-const GODMODE_POLICY_PATH = path.resolve(process.cwd(), '..', 'config', 'nemoclaw-godmode-policy.yaml');
+const PRECISION_PROMPT_PATH = path.resolve(process.cwd(), '..', 'config', 'nemoclaw-precision-orchestration.system-prompt.md');
+const PRECISION_POLICY_PATH = path.resolve(process.cwd(), '..', 'config', 'nemoclaw-precision-orchestration-policy.yaml');
 
 // ── Graceful shutdown state ──────────────────────────────────────
 let isShuttingDown = false;
@@ -319,6 +377,7 @@ async function chatWithOllama(messages: Array<{ role: string; content: string }>
 const getCachedMermateState = timedCache(5_000, getMermateState);
 const getCachedOllamaState = timedCache(10_000, getOllamaState);
 const getCachedModels = timedCache(30_000, async () => listModels(config));
+const getCachedLivingGraph = timedCache(2_000, async () => getLivingArchitectureGraph());
 
 // ── Mermate background watch ─────────────────────────────────────
 let mermateWatchRunning = false;
@@ -369,10 +428,11 @@ app.post('/v1/chat/completions', authenticate, async (req, res) => {
     if (!body.messages?.length) { res.status(400).json({ error: { message: 'messages required', type: 'invalid_request' } }); return; }
     body.model = body.model || config.defaultModel;
     // Idempotency: return cached result if same key
-    const idempotencyKey = req.headers['idempotency-key'] as string | undefined;
+    const idemHeader = req.headers['idempotency-key'] as string | undefined;
+    const idempotencyKey = idemHeader ? idempotencyStorageKey(idemHeader, body) : undefined;
     if (idempotencyKey) {
-      const cached = idempotencyCache.get(idempotencyKey);
-      if (cached && Date.now() < cached.expiresAt) {
+      const cached = idempotencyGet(idempotencyKey);
+      if (cached) {
         res.setHeader('X-Opseeq-Idempotent', 'hit');
         res.json(cached.result);
         return;
@@ -420,9 +480,7 @@ app.post('/v1/chat/completions', authenticate, async (req, res) => {
       return;
     }
     const result = await routeInference(body, config, (req as any).id);
-    if (idempotencyKey) {
-      idempotencyCache.set(idempotencyKey, { result, expiresAt: Date.now() + 3600_000 });
-    }
+    if (idempotencyKey) idempotencySet(idempotencyKey, result);
     res.json(result);
   } catch (err) {
     res.status(502).json({ error: { message: err instanceof Error ? err.message : 'upstream error', type: 'upstream_error' } });
@@ -430,7 +488,7 @@ app.post('/v1/chat/completions', authenticate, async (req, res) => {
 });
 
 app.post('/v1/embeddings', authenticate, async (req, res) => {
-  const provider = config.providers.find(p => p.name !== 'ollama' && p.name !== 'anthropic');
+  const provider = getEmbeddingProvider(config);
   if (!provider) { res.status(503).json({ error: { message: 'No embedding provider' } }); return; }
   try {
     const up = await fetch(`${provider.baseUrl}/embeddings`, {
@@ -441,8 +499,6 @@ app.post('/v1/embeddings', authenticate, async (req, res) => {
   } catch (err) { res.status(502).json({ error: { message: err instanceof Error ? err.message : 'error' } }); }
 });
 
-// ── Idempotency cache (prevents duplicate inference on retries) ──
-const idempotencyCache = new Map<string, { result: unknown; expiresAt: number }>();
 setInterval(() => {
   const now = Date.now();
   for (const [k, v] of idempotencyCache) { if (now >= v.expiresAt) idempotencyCache.delete(k); }
@@ -466,12 +522,25 @@ if (config.mcpEnabled) {
 // ══════════════════════════════════════════════════════════════════
 
 app.get('/api/status', authenticate, async (_req, res) => {
-  const allModels = await getCachedModels();
-  const [mermate, ollama, nemoclaw] = await Promise.all([getCachedMermateState(), getCachedOllamaState(), getNemoClawOverview(process.env)]);
-  const livingArchitectureGraph = getLivingArchitectureGraph();
-  const godModeDefaults = getGodModeRoutingDefaults('all');
-  const extensionRegistry = getExtensionRegistry();
-  const recentGodArtifacts = listImmutableArtifacts(undefined, 5);
+  const [
+    allModels,
+    mermate,
+    ollama,
+    nemoclaw,
+    livingArchitectureGraph,
+    precisionDefaults,
+    extensionRegistry,
+    recentPrecisionArtifacts,
+  ] = await Promise.all([
+    getCachedModels(),
+    getCachedMermateState(),
+    getCachedOllamaState(),
+    getNemoClawOverview(process.env),
+    getCachedLivingGraph(),
+    Promise.resolve(getPrecisionOrchestrationRoutingDefaults('all')),
+    Promise.resolve(getExtensionRegistry()),
+    Promise.resolve(listImmutableArtifacts(undefined, 5)),
+  ]);
   res.json({
     meta: { generatedAt: new Date().toISOString(), serverStartedAt, uptimeSeconds: process.uptime(), version: VERSION },
     controls: {
@@ -499,20 +568,20 @@ app.get('/api/status', authenticate, async (_req, res) => {
       models: allModels.map(m => m.id), defaultModel: config.defaultModel,
       providerCount: config.providers.length,
     },
-    godMode: {
-      plannerModel: godModeDefaults.plannerModel,
-      executionModel: godModeDefaults.executionModel,
+    precisionOrchestration: {
+      plannerModel: precisionDefaults.plannerModel,
+      executionModel: precisionDefaults.executionModel,
       extensionPacks: extensionRegistry.map((pack) => ({ id: pack.id, label: pack.label, targets: pack.targets })),
       assets: {
-        prompt: GODMODE_PROMPT_PATH,
-        policy: GODMODE_POLICY_PATH,
+        prompt: PRECISION_PROMPT_PATH,
+        policy: PRECISION_POLICY_PATH,
       },
       livingArchitectureGraph: {
         versions: livingArchitectureGraph.versions.length,
         nodes: livingArchitectureGraph.nodes.length,
         edges: livingArchitectureGraph.edges.length,
       },
-      immutableArtifacts: recentGodArtifacts.map((artifact) => ({
+      immutableArtifacts: recentPrecisionArtifacts.map((artifact) => ({
         id: artifact.id,
         kind: artifact.kind,
         taskId: artifact.taskId,
@@ -703,22 +772,34 @@ app.post('/api/nemoclaw/default', authenticate, async (req, res) => {
 });
 
 app.get('/api/ooda/extensions', authenticate, (_req, res) => {
-  const defaults = getGodModeRoutingDefaults('all');
+  const defaults = getPrecisionOrchestrationRoutingDefaults('all');
   res.json({
     defaults,
     assets: {
-      prompt: GODMODE_PROMPT_PATH,
-      policy: GODMODE_POLICY_PATH,
+      prompt: PRECISION_PROMPT_PATH,
+      policy: PRECISION_POLICY_PATH,
     },
     extensions: getExtensionRegistry(),
   });
 });
 
-app.get('/api/ooda/graph', authenticate, (_req, res) => {
-  const graph = getLivingArchitectureGraph();
+app.get('/api/ooda/dashboard', authenticate, (req, res) => {
+  if (req.query.refresh === 'true') {
+    refreshLivingArchitectureGraphIndex({
+      taskId: `dashboard-${Date.now().toString(36)}`,
+      recordVersion: false,
+    });
+  }
+  const query = typeof req.query.q === 'string' ? req.query.q : undefined;
   res.json({
     generatedAt: new Date().toISOString(),
-    graph,
+    defaults: getPrecisionOrchestrationRoutingDefaults('all'),
+    assets: {
+      prompt: PRECISION_PROMPT_PATH,
+      policy: PRECISION_POLICY_PATH,
+    },
+    dashboard: buildLivingArchitectureDashboard(),
+    query: query ? queryLivingArchitectureGraph({ query, limit: 12 }) : null,
     recentArtifacts: listImmutableArtifacts(undefined, 10).map((artifact) => ({
       id: artifact.id,
       taskId: artifact.taskId,
@@ -730,14 +811,80 @@ app.get('/api/ooda/graph', authenticate, (_req, res) => {
   });
 });
 
-app.post('/api/ooda/godmode', authenticate, async (req, res) => {
+app.get('/api/ooda/graph', authenticate, (req, res) => {
+  if (req.query.refresh === 'true') {
+    refreshLivingArchitectureGraphIndex({
+      taskId: `graph-${Date.now().toString(36)}`,
+      recordVersion: req.query.recordVersion === 'true',
+    });
+  }
+  const graph = getLivingArchitectureGraph();
+  const query = queryLivingArchitectureGraph({
+    query: typeof req.query.q === 'string' ? req.query.q : undefined,
+    repoId: typeof req.query.repoId === 'string' ? req.query.repoId : undefined,
+    taskId: typeof req.query.taskId === 'string' ? req.query.taskId : undefined,
+    kind: typeof req.query.kind === 'string' ? req.query.kind as LivingArchitectureQueryOptions['kind'] : undefined,
+    limit: typeof req.query.limit === 'string' ? Number(req.query.limit) : undefined,
+    includeBacklinks: req.query.backlinks === 'false' ? false : undefined,
+  });
+  res.json({
+    generatedAt: new Date().toISOString(),
+    graph,
+    query,
+    dashboard: buildLivingArchitectureDashboard(),
+    recentArtifacts: listImmutableArtifacts(undefined, 10).map((artifact) => ({
+      id: artifact.id,
+      taskId: artifact.taskId,
+      kind: artifact.kind,
+      createdAt: artifact.createdAt,
+      hash: artifact.hash,
+      path: artifact.path,
+    })),
+  });
+});
+
+app.get('/api/ooda/graph/search', authenticate, (req, res) => {
+  res.json({
+    generatedAt: new Date().toISOString(),
+    result: queryLivingArchitectureGraph({
+      query: typeof req.query.q === 'string' ? req.query.q : undefined,
+      repoId: typeof req.query.repoId === 'string' ? req.query.repoId : undefined,
+      taskId: typeof req.query.taskId === 'string' ? req.query.taskId : undefined,
+      kind: typeof req.query.kind === 'string' ? req.query.kind as LivingArchitectureQueryOptions['kind'] : undefined,
+      limit: typeof req.query.limit === 'string' ? Number(req.query.limit) : undefined,
+      includeBacklinks: req.query.backlinks === 'false' ? false : undefined,
+    }),
+  });
+});
+
+app.get('/api/ooda/graph/node/:nodeId', authenticate, (req, res) => {
+  res.json({
+    generatedAt: new Date().toISOString(),
+    snapshot: getLivingArchitectureNode(String(req.params.nodeId)),
+  });
+});
+
+app.post('/api/ooda/graph/refresh', authenticate, (req, res) => {
+  const refreshed = refreshLivingArchitectureGraphIndex({
+    taskId: typeof req.body?.taskId === 'string' ? req.body.taskId : `refresh-${Date.now().toString(36)}`,
+    recordVersion: req.body?.recordVersion !== false,
+  });
+  res.json({
+    generatedAt: new Date().toISOString(),
+    version: refreshed.version,
+    diagram: refreshed.diagram,
+    dashboard: buildLivingArchitectureDashboard(),
+  });
+});
+
+app.post('/api/ooda/precision', authenticate, async (req, res) => {
   const intent = req.body?.intent;
   if (!intent || typeof intent !== 'string') {
     res.status(400).json({ error: 'intent is required' });
     return;
   }
   try {
-    const result = await orchestrateGodModePipeline({
+    const result = await orchestratePrecisionPipeline({
       intent,
       repoPath: typeof req.body?.repoPath === 'string' ? req.body.repoPath : undefined,
       appId: typeof req.body?.appId === 'string' ? req.body.appId : undefined,
@@ -811,10 +958,70 @@ for (const [method, path] of [['POST', '/api/render/tla'], ['POST', '/api/render
   if (method === 'GET') app.get(path, handler); else app.post(path, handler);
 }
 
+// ── v2.4 General-Clawd Absorption + Execution Runtime ────────────────
+app.get('/api/absorption/status', (_req, res) => { res.json(getAbsorptionStatus()); });
+app.post('/api/execution/bootstrap', authenticate, (req, res) => {
+  const { prompt, taskId } = req.body || {};
+  if (!prompt) { res.status(400).json({ error: 'prompt required' }); return; }
+  res.json(bootstrapSession(prompt, taskId || crypto.randomUUID()));
+});
+app.post('/api/execution/route', authenticate, (req, res) => {
+  const { prompt, limit } = req.body || {};
+  if (!prompt) { res.status(400).json({ error: 'prompt required' }); return; }
+  res.json(routePrompt(prompt, limit));
+});
+app.get('/api/execution/tools', (_req, res) => { res.json(assembleToolPool()); });
+app.get('/api/execution/sessions', (_req, res) => { res.json(listSessions()); });
+
+// ── v2.4 iTerm2 Adaptive Plug + Pipeline ─────────────────────────────
+app.get('/api/pipeline/stages', (_req, res) => { res.json(PIPELINE_STAGES); });
+app.get('/api/pipeline/mermate-vendor', (_req, res) => { res.json(getMermateVendorStatus()); });
+const adaptiveSessions = new Map<string, Awaited<ReturnType<typeof createAdaptiveSession>>>();
+app.post('/api/pipeline/session', authenticate, async (req, res) => {
+  try { const s = await createAdaptiveSession(req.body?.taskId || crypto.randomUUID()); adaptiveSessions.set(s.sessionId, s); res.json({ sessionId: s.sessionId, stages: getPipelineStatus(s) }); }
+  catch (e) { res.status(500).json({ error: String(e) }); }
+});
+app.post('/api/pipeline/execute', authenticate, async (req, res) => {
+  const { sessionId, stageId, command, cwd } = req.body || {};
+  const s = adaptiveSessions.get(sessionId);
+  if (!s) { res.status(404).json({ error: 'session not found' }); return; }
+  if (!canExecuteStage(s, stageId)) { res.status(409).json({ error: 'dependencies not met' }); return; }
+  try { res.json({ stage: await executeInPane(s, stageId, command, cwd), pipeline: getPipelineStatus(s) }); }
+  catch (e) { res.status(500).json({ error: String(e) }); }
+});
+app.get('/api/pipeline/status/:sid', (req, res) => {
+  const s = adaptiveSessions.get(req.params.sid);
+  if (!s) { res.status(404).json({ error: 'not found' }); return; }
+  res.json(getPipelineStatus(s));
+});
+
+// ── v2.4 Windsurf Subagent Orchestration ─────────────────────────────
+app.get('/api/subagents/dashboard', (_req, res) => { res.json(getOrchestratorDashboard()); });
+app.post('/api/subagents/delegate', authenticate, (req, res) => {
+  const { parentTaskId, mandate } = req.body || {};
+  if (!parentTaskId || !mandate) { res.status(400).json({ error: 'parentTaskId+mandate required' }); return; }
+  res.json(delegateTask(parentTaskId, req.body.delegatorId || 'precision', mandate));
+});
+app.post('/api/subagents/assess', (req, res) => {
+  if (!req.body?.description) { res.status(400).json({ error: 'description required' }); return; }
+  res.json(assessCapabilities(req.body.description));
+});
+app.post('/api/subagents/cross-repo', authenticate, (req, res) => {
+  const { parentTaskId, description } = req.body || {};
+  if (!parentTaskId || !description) { res.status(400).json({ error: 'required fields missing' }); return; }
+  res.json(buildCrossRepoOptimizationTask(parentTaskId, 'windsurf', req.body.targetRepos || ['opseeq'], description));
+});
+app.get('/api/subagents/active', (_req, res) => { res.json(getActiveSubagentTasks()); });
+app.get('/api/subagents/task/:tid', (req, res) => {
+  const t = getSubagentTask(req.params.tid);
+  if (!t) { res.status(404).json({ error: 'not found' }); return; }
+  res.json(t);
+});
+
 app.get('/', (_req, res) => {
   res.json({
     service: 'opseeq', version: VERSION,
-    description: 'Opseeq AI Agent Gateway — full replacement for dylans_nemoclaw with multi-provider inference, MCP, and deep app integration',
+    description: 'Opseeq v2.4 — Full General-Clawd Absorption + Windsurf Subagent Optimization Edition',
     endpoints: {
       health: '/health', status: '/api/status', chat: '/api/chat',
       models: '/v1/models', completions: '/v1/chat/completions',
@@ -823,9 +1030,15 @@ app.get('/', (_req, res) => {
       pipeline: '/api/architect/pipeline', scaffold: '/api/builder/scaffold',
       repo_connect: '/api/repos/connect', app_open: '/api/apps/open',
       nemoclaw_status: '/api/nemoclaw/status', nemoclaw_action: '/api/nemoclaw/actions', nemoclaw_default: '/api/nemoclaw/default',
-      ooda_extensions: '/api/ooda/extensions', ooda_graph: '/api/ooda/graph', ooda_godmode: '/api/ooda/godmode',
+      ooda_extensions: '/api/ooda/extensions', ooda_dashboard: '/api/ooda/dashboard', ooda_graph: '/api/ooda/graph', ooda_graph_search: '/api/ooda/graph/search', ooda_graph_refresh: '/api/ooda/graph/refresh', ooda_precision: '/api/ooda/precision',
       mcp: config.mcpEnabled ? '/mcp' : 'disabled',
       mermate_render: '/api/render', mermate_tla: '/api/render/tla', mermate_ts: '/api/render/ts',
+      absorption_status: '/api/absorption/status', execution_bootstrap: '/api/execution/bootstrap',
+      execution_route: '/api/execution/route', execution_tools: '/api/execution/tools', execution_sessions: '/api/execution/sessions',
+      pipeline_stages: '/api/pipeline/stages', pipeline_session: '/api/pipeline/session', pipeline_execute: '/api/pipeline/execute',
+      pipeline_mermate_vendor: '/api/pipeline/mermate-vendor',
+      subagents_dashboard: '/api/subagents/dashboard', subagents_delegate: '/api/subagents/delegate',
+      subagents_assess: '/api/subagents/assess', subagents_cross_repo: '/api/subagents/cross-repo',
     },
     providers: config.providers.map(p => p.name),
   });
