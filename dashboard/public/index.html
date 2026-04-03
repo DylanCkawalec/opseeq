@@ -38,6 +38,11 @@
         <span class="meta" id="meta-version">--</span>
       </div>
       <div class="sidebar-item">
+        <span class="dot" id="dot-nemoclaw"></span>
+        <span class="label">NemoClaw</span>
+        <span class="meta" id="meta-nemoclaw">--</span>
+      </div>
+      <div class="sidebar-item">
         <span class="dot gray"></span>
         <span class="label">Providers</span>
         <span class="meta" id="meta-providers">--</span>
@@ -82,102 +87,260 @@
       <div>
         <h2>Dashboard</h2>
         <p class="session-hint session-hint-dash" id="session-hint-dash" hidden>Close every Opseeq tab to end this session.</p>
+        <div class="view-tabs" role="tablist" aria-label="Dashboard views">
+          <button class="view-tab active" data-view-target="overview" type="button">Overview</button>
+          <button class="view-tab" data-view-target="nemoclaw" type="button">NemoClaw</button>
+          <button class="view-tab" data-view-target="models" type="button">Models</button>
+        </div>
       </div>
       <span class="version-badge" id="version-badge">v--</span>
     </div>
 
-    <!-- App cards -->
-    <div class="cards">
-      <!-- Mermate -->
-      <div class="card">
-        <div class="card-header">
-          <div class="card-icon mermate">M</div>
-          <div>
-            <div class="card-title">Mermate</div>
-            <div class="card-subtitle">Architecture &amp; specification copilot</div>
-          </div>
-        </div>
-        <div class="card-body" id="mermate-body">
-          <div class="card-stat"><span class="key">Status</span><span class="val" id="mermate-status">--</span></div>
-          <div class="card-stat"><span class="key">Agents</span><span class="val" id="mermate-agents">--</span></div>
-          <div class="card-stat"><span class="key">TLA+</span><span class="val" id="mermate-tla">--</span></div>
-          <div class="card-stat"><span class="key">TypeScript</span><span class="val" id="mermate-ts">--</span></div>
-        </div>
-        <a href="http://localhost:3333" target="_blank" class="btn-open">Open Mermate</a>
-      </div>
-
-      <!-- Synth -->
-      <div class="card">
-        <div class="card-header">
-          <div class="card-icon synth">S</div>
-          <div>
-            <div class="card-title">Synth</div>
-            <div class="card-subtitle">Prediction market trading desk</div>
-          </div>
-        </div>
-        <div class="card-body" id="synth-body">
-          <div class="card-stat"><span class="key">Status</span><span class="val" id="synth-status">--</span></div>
-          <div class="card-stat"><span class="key">Simulation</span><span class="val" id="synth-sim">--</span></div>
-          <div class="card-stat"><span class="key">Predictions</span><span class="val" id="synth-pred">--</span></div>
-          <div class="card-stat"><span class="key">AI Engine</span><span class="val" id="synth-ai">--</span></div>
-        </div>
-        <a href="http://localhost:8420" target="_blank" class="btn-open">Open Synth</a>
-      </div>
-
-      <!-- Ollama -->
-      <div class="card">
-        <div class="card-header">
-          <div class="card-icon ollama">O</div>
-          <div>
-            <div class="card-title">Ollama</div>
-            <div class="card-subtitle">Local model inference</div>
-          </div>
-        </div>
-        <div class="card-body" id="ollama-body">
-          <div class="card-stat"><span class="key">Status</span><span class="val" id="ollama-status">--</span></div>
-          <div class="card-stat"><span class="key">Default</span><span class="val" id="ollama-default">--</span></div>
-          <div class="card-stat"><span class="key">Models</span><span class="val" id="ollama-count">--</span></div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Kernel panel -->
-    <div class="kernel-grid">
-      <div>
-        <div class="card" style="height:100%;">
+    <section class="view-panel view-panel-active" data-view="overview">
+      <!-- App cards -->
+      <div class="cards">
+        <!-- Mermate -->
+        <div class="card">
           <div class="card-header">
-            <div class="card-icon kernel">K</div>
+            <div class="card-icon mermate">M</div>
             <div>
-              <div class="card-title">Runtime Kernel</div>
-              <div class="card-subtitle">opseeq-core (Rust)</div>
+              <div class="card-title">Mermate</div>
+              <div class="card-subtitle">Architecture &amp; specification copilot</div>
+            </div>
+          </div>
+          <div class="card-body" id="mermate-body">
+            <div class="card-stat"><span class="key">Status</span><span class="val" id="mermate-status">--</span></div>
+            <div class="card-stat"><span class="key">Agents</span><span class="val" id="mermate-agents">--</span></div>
+            <div class="card-stat"><span class="key">TLA+</span><span class="val" id="mermate-tla">--</span></div>
+            <div class="card-stat"><span class="key">TypeScript</span><span class="val" id="mermate-ts">--</span></div>
+            <div class="card-stat"><span class="key">Model</span><span class="val val-mono" id="mermate-model">--</span></div>
+          </div>
+          <a href="http://localhost:3333" target="_blank" class="btn-open" data-app-id="mermate">Open Mermate</a>
+        </div>
+
+        <!-- Synth -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-icon synth">S</div>
+            <div>
+              <div class="card-title">Synth</div>
+              <div class="card-subtitle">Prediction market trading desk</div>
+            </div>
+          </div>
+          <div class="card-body" id="synth-body">
+            <div class="card-stat"><span class="key">Status</span><span class="val" id="synth-status">--</span></div>
+            <div class="card-stat"><span class="key">Simulation</span><span class="val" id="synth-sim">--</span></div>
+            <div class="card-stat"><span class="key">Predictions</span><span class="val" id="synth-pred">--</span></div>
+            <div class="card-stat"><span class="key">AI Engine</span><span class="val" id="synth-ai">--</span></div>
+            <div class="card-stat"><span class="key">Model</span><span class="val val-mono" id="synth-model">--</span></div>
+          </div>
+          <a href="http://localhost:8420" target="_blank" class="btn-open" data-app-id="synth">Open Synth</a>
+        </div>
+
+        <!-- Ollama -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-icon ollama">O</div>
+            <div>
+              <div class="card-title">Ollama</div>
+              <div class="card-subtitle">Local model inference</div>
+            </div>
+          </div>
+          <div class="card-body" id="ollama-body">
+            <div class="card-stat"><span class="key">Status</span><span class="val" id="ollama-status">--</span></div>
+            <div class="card-stat"><span class="key">Default</span><span class="val" id="ollama-default">--</span></div>
+            <div class="card-stat"><span class="key">Models</span><span class="val" id="ollama-count">--</span></div>
+            <div class="card-stat"><span class="key">Assigned</span><span class="val" id="ollama-assigned">--</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Kernel panel -->
+      <div class="kernel-grid">
+        <div>
+          <div class="card" style="height:100%;">
+            <div class="card-header">
+              <div class="card-icon kernel">K</div>
+              <div>
+                <div class="card-title">Runtime Kernel</div>
+                <div class="card-subtitle">opseeq-core (Rust)</div>
+              </div>
+            </div>
+            <div class="card-body">
+              <div class="card-stat"><span class="key">Uptime</span><span class="val" id="kernel-uptime">--</span></div>
+              <div class="card-stat"><span class="key">MCP</span><span class="val" id="kernel-mcp">--</span></div>
+            </div>
+            <div class="sidebar-label" style="margin-top:8px;">Providers</div>
+            <div class="provider-list" id="provider-list"></div>
+          </div>
+        </div>
+        <div class="events-panel">
+          <h4>Recent Events</h4>
+          <div id="events-list">
+            <div class="event-line" style="color:var(--text-dim);">Waiting for events...</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Plugin connector -->
+      <div class="plugin-section">
+        <h3>Connect a New App</h3>
+        <p style="font-size:13px; color:var(--text-muted); margin-bottom:16px;">Paste a local repo path to generate the Opseeq connection config.</p>
+        <div class="plugin-input-row">
+          <input type="text" class="plugin-input" id="plugin-path" placeholder="/Users/you/Desktop/developer/my-app">
+          <button class="btn-primary" style="padding:10px 20px; font-size:13px;" id="btn-connect">Generate</button>
+        </div>
+        <div class="plugin-output" id="plugin-output"></div>
+      </div>
+    </section>
+
+    <section class="view-panel" data-view="nemoclaw" hidden>
+      <div class="nemoclaw-grid">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-icon nemoclaw">N</div>
+            <div>
+              <div class="card-title">NemoClaw Runtime</div>
+              <div class="card-subtitle">Gateway presence, registry, and default sandbox control</div>
             </div>
           </div>
           <div class="card-body">
-            <div class="card-stat"><span class="key">Uptime</span><span class="val" id="kernel-uptime">--</span></div>
-            <div class="card-stat"><span class="key">MCP</span><span class="val" id="kernel-mcp">--</span></div>
+            <div class="card-stat"><span class="key">Gateway</span><span class="val" id="nemoclaw-gateway">--</span></div>
+            <div class="card-stat"><span class="key">Active Gateway</span><span class="val" id="nemoclaw-active-gateway">--</span></div>
+            <div class="card-stat"><span class="key">Default Sandbox</span><span class="val" id="nemoclaw-default">--</span></div>
+            <div class="card-stat"><span class="key">Reachable</span><span class="val" id="nemoclaw-reachable">--</span></div>
+            <div class="card-stat"><span class="key">Registry</span><span class="val val-mono" id="nemoclaw-registry">--</span></div>
           </div>
-          <div class="sidebar-label" style="margin-top:8px;">Providers</div>
-          <div class="provider-list" id="provider-list"></div>
         </div>
-      </div>
-      <div class="events-panel">
-        <h4>Recent Events</h4>
-        <div id="events-list">
-          <div class="event-line" style="color:var(--text-dim);">Waiting for events...</div>
-        </div>
-      </div>
-    </div>
 
-    <!-- Plugin connector -->
-    <div class="plugin-section">
-      <h3>Connect a New App</h3>
-      <p style="font-size:13px; color:var(--text-muted); margin-bottom:16px;">Paste a local repo path to generate the Opseeq connection config.</p>
-      <div class="plugin-input-row">
-        <input type="text" class="plugin-input" id="plugin-path" placeholder="/Users/you/Desktop/developer/my-app">
-        <button class="btn-primary" style="padding:10px 20px; font-size:13px;" id="btn-connect">Generate</button>
+        <div class="card">
+          <div class="card-header">
+            <div class="card-icon control">C</div>
+            <div>
+              <div class="card-title">Connected Surfaces</div>
+              <div class="card-subtitle">Quick-launch local applications next to sandbox actions</div>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="card-stat"><span class="key">Mermate</span><span class="val" id="nemoclaw-mermate-status">--</span></div>
+            <div class="card-stat"><span class="key">Synth</span><span class="val" id="nemoclaw-synth-status">--</span></div>
+            <div class="card-stat"><span class="key">OpenShell</span><span class="val val-mono" id="nemoclaw-gateway-path">--</span></div>
+          </div>
+          <div class="action-row">
+            <button class="btn-open" type="button" data-app-id="mermate">Open Mermate</button>
+            <button class="btn-open" type="button" data-app-id="synth">Open Synth</button>
+            <button class="btn-open" type="button" id="btn-nemoclaw-refresh">Refresh</button>
+          </div>
+        </div>
       </div>
-      <div class="plugin-output" id="plugin-output"></div>
-    </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-icon nemoclaw">S</div>
+          <div>
+            <div class="card-title">Sandboxes</div>
+            <div class="card-subtitle">Inspect, connect, tail logs, and set the default sandbox</div>
+          </div>
+        </div>
+        <div class="sandbox-list" id="nemoclaw-sandboxes">
+          <div class="empty-state">Loading sandboxes…</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-icon control">T</div>
+          <div>
+            <div class="card-title">Inspector</div>
+            <div class="card-subtitle">Runs <code>nemoclaw &lt;sandbox&gt; status</code> and keeps the output in the dashboard</div>
+          </div>
+        </div>
+        <pre class="terminal-output" id="nemoclaw-inspector">Select a sandbox and run Inspect to load its live status here.</pre>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-icon control">E</div>
+          <div>
+            <div class="card-title">Embedded Terminal</div>
+            <div class="card-subtitle">Browser terminal for NemoClaw connect/log sessions and General-Clawd workspace access</div>
+          </div>
+        </div>
+        <div class="action-row terminal-toolbar">
+          <button class="btn-open" type="button" id="btn-terminal-shell">Opseeq Shell</button>
+          <button class="btn-open" type="button" id="btn-terminal-general-clawd">General-Clawd</button>
+          <button class="btn-open" type="button" id="btn-terminal-stop">Stop</button>
+          <button class="btn-open" type="button" id="btn-terminal-clear">Clear</button>
+          <span class="state-pill muted" id="nemoclaw-terminal-state">Connecting…</span>
+        </div>
+        <pre class="terminal-output terminal-live" id="nemoclaw-terminal-screen">No terminal session started.</pre>
+        <div class="terminal-input-row">
+          <input type="text" class="plugin-input terminal-input" id="nemoclaw-terminal-input" placeholder="Type input for the active terminal session and press Enter">
+          <button class="btn-open" type="button" id="btn-nemoclaw-terminal-send">Send</button>
+          <button class="btn-open" type="button" id="btn-nemoclaw-terminal-interrupt">Ctrl+C</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="view-panel" data-view="models" hidden>
+      <div class="nemoclaw-grid">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-icon ollama">O</div>
+            <div>
+              <div class="card-title">Model Routing</div>
+              <div class="card-subtitle">Track which app is using which provider, model, and extension pack</div>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="card-stat"><span class="key">Registry</span><span class="val val-mono" id="app-registry-path">--</span></div>
+            <div class="card-stat"><span class="key">Apps tracked</span><span class="val" id="app-registry-count">--</span></div>
+            <div class="card-stat"><span class="key">Local models</span><span class="val" id="models-local-count">--</span></div>
+          </div>
+          <div class="action-row">
+            <button class="btn-open" type="button" id="btn-models-refresh">Refresh</button>
+            <button class="btn-open" type="button" id="btn-runtime-redeploy">Redeploy v5</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <div class="card-icon control">X</div>
+            <div>
+              <div class="card-title">Extension Packs</div>
+              <div class="card-subtitle">Local packs Opseeq can use to deepen app-specific behavior</div>
+            </div>
+          </div>
+          <div class="extension-list" id="extension-list">
+            <div class="empty-state">Loading extension packs…</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-icon control">A</div>
+          <div>
+            <div class="card-title">App Assignments</div>
+            <div class="card-subtitle">Simple controls on top, deeper routing and writeback behind them</div>
+          </div>
+        </div>
+        <div class="app-routing-list" id="app-routing-list">
+          <div class="empty-state">Loading app model assignments…</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-icon control">R</div>
+          <div>
+            <div class="card-title">Runtime Actions</div>
+            <div class="card-subtitle">Use this to rebuild the current Opseeq container when the live gateway drifts behind the repo</div>
+          </div>
+        </div>
+        <pre class="terminal-output" id="runtime-action-output">No runtime action executed yet.</pre>
+      </div>
+    </section>
   </main>
 </div>
 

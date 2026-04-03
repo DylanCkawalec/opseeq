@@ -1,0 +1,646 @@
+\documentclass[11pt]{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage{microtype}
+\usepackage{amsmath,amssymb,amsthm,mathtools}
+\usepackage{bm}
+\usepackage{enumitem}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage{url}
+\usepackage{xcolor}
+\usepackage{graphicx}
+\usepackage{titlesec}
+\usepackage{setspace}
+\usepackage{array}
+\usepackage{longtable}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=blue!50!black,
+  citecolor=blue!50!black,
+  urlcolor=blue!50!black,
+  pdftitle={CELLAR: Cognitive Emergent Local Lakehouse Artifact Runtime},
+  pdfauthor={Dylan Kawalec}
+}
+
+\setlength{\parskip}{0.5em}
+\setlength{\parindent}{0pt}
+\onehalfspacing
+
+\titleformat{\section}{\large\bfseries}{\thesection.}{0.5em}{}
+\titleformat{\subsection}{\normalsize\bfseries}{\thesubsection.}{0.5em}{}
+
+\newtheorem{axiom}{Axiom}
+\newtheorem{postulate}{Postulate}
+\newtheorem{proposition}{Proposition}
+\newtheorem{lemma}{Lemma}
+\newtheorem{corollary}{Corollary}
+\theoremstyle{definition}
+\newtheorem{definition}{Definition}
+\newtheorem{remark}{Remark}
+
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\Var}{\mathrm{Var}}
+\newcommand{\KL}{\mathrm{KL}}
+\newcommand{\argmax}{\operatornamewithlimits{arg\,max}}
+\newcommand{\argmin}{\operatornamewithlimits{arg\,min}}
+\newcommand{\Ieff}{\mathcal{I}_{\mathrm{eff}}}
+\newcommand{\cellar}{\textsc{Cellar}}
+\newcommand{\hot}{\mathcal{H}}
+\newcommand{\cold}{\mathcal{C}}
+\newcommand{\graph}{\mathcal{G}}
+\newcommand{\state}{\mathcal{S}}
+\newcommand{\budget}{\mathcal{B}}
+
+\begin{document}
+
+\begin{center}
+    {\LARGE \textbf{CELLAR: Cognitive Emergent Local Lakehouse Artifact Runtime}}\\[0.5em]
+    {\large A Local, Artifact-Centric, Simulation-Augmented Runtime for Small-Model Intelligence}\\[1em]
+    {\large Dylan Kawalec}
+\end{center}
+
+\begin{abstract}
+We introduce \cellar\ (\textbf{Cognitive Emergent Local Lakehouse Artifact Runtime}), a formal protocol for augmenting a small local language model with artifact memory, hierarchical simulation, budgeted metareasoning, and calibrated posterior aggregation. The central thesis is that a small model should not be treated as the whole of intelligence, but rather as a bounded policy layer governing retrieval, scheduling, selective simulation, and durable memory formation. The protocol is therefore designed around four commitments: inference primacy, artifact immutability, ephemeral execution state, and bounded hierarchical compute. Persistent memory is represented as a typed temporal multigraph over a two-plane storage substrate, while expensive computation is externalized into immutable artifacts with provenance. The terminal output of the system is not a claim of absolute truth, but a structured posterior decision summary with uncertainty, ranked explanatory paths, and replayable provenance. This paper presents the formal definitions, axioms, postulates, propositions, architectural layers, implementation notes, and algorithmic design principles of \cellar\ as a scientific runtime for local machine reasoning under bounded resources.
+\end{abstract}
+
+\section{Introduction}
+
+The common intuition in contemporary language-model engineering is that intelligence scales primarily with parameter count. \cellar\ begins from a different systems hypothesis: effective intelligence in deployment is not a property of model weights alone, but of the entire runtime in which inference is embedded. A fixed model can become substantially more useful if it is coupled to disciplined retrieval, durable memory, bounded simulation, and explicit budget-aware control.
+
+This is especially relevant for local small models. A small model, when used as a high-frequency policy layer, can make repeated decisions quickly and economically. What it often lacks in raw internalized knowledge can be partially compensated for by stronger retrieval, structured memory, and search. The goal of \cellar\ is to formalize this compensation as a scientific runtime.
+
+The protocol is local-first, artifact-centric, and simulation-augmented. It treats expensive cognition as something that should leave durable traces rather than disappearing into ephemeral execution. It treats memory as a typed temporal graph rather than a loose cache. It treats search as a bounded, selective escalation rather than a default mode. Most importantly, it treats the final answer not as an oracle statement but as a posterior summary with uncertainty, provenance, and replayability.
+
+The result is not a metaphysical truth engine. It is a formal method for local machine reasoning that aims to be more disciplined, auditable, and scientifically interpretable than one-shot generation.
+
+\section{Motivation and Scientific Position}
+
+The motivating problem is straightforward: one model call is typically a fragile estimator. It compresses a large latent prior into a single output, but usually leaves uncertainty, branching structure, causal alternatives, and provenance implicit. Human scientific reasoning, by contrast, does not proceed by single-shot declaration. It proceeds through hypothesis formation, branching, evidence gathering, evaluation, revision, and documented record.
+
+\cellar\ attempts to make that epistemic pattern computationally explicit. Its purpose is not to guarantee truth in an unrestricted abstract sense. No finite computational protocol can guarantee absolute truth over open-ended domains. The proper target is more modest and more defensible: disciplined posterior belief under bounded computation.
+
+The central systems claim can be summarized as
+\[
+\Ieff \approx f(\theta, R, S, A, B),
+\]
+where \(\theta\) denotes model parameters, \(R\) retrieval quality, \(S\) simulator/search quality, \(A\) artifact memory quality, and \(B\) budgeting and metareasoning quality. This expression is not intended as a literal closed-form law. It states that effective capability is a systems-level function, not merely a model-scale function.
+
+The practical implication is significant. Even if \(\theta\) remains fixed, improvements in retrieval, memory, scheduling, or simulation can raise the quality of decision-making. \cellar\ is the formalization of that insight.
+
+\section{Definitions}
+
+\begin{definition}[Policy Model]
+Let \(\pi_{\theta}\) denote a local small language model with parameters \(\theta\), acting as the sole policy-compression layer. At decision epoch \(t\),
+\[
+\pi_{\theta}(o_t, m_t, b_t) \mapsto (u_t, q_t, \hat{V}_t, \hat{C}_t),
+\]
+where \(o_t\) is the current observation, \(m_t\) is retrieved memory, \(b_t\) is the current budget state, \(u_t\) is a proposed action directive, \(q_t \in [0,1]\) is an epistemic uncertainty estimate, \(\hat{V}_t\) is estimated utility, and \(\hat{C}_t\) is estimated cost.
+\end{definition}
+
+\begin{definition}[Artifact]
+An artifact is the canonical durable record of a computationally expensive operation:
+\[
+\alpha_i = (x_i, y_i, p_i, c_i, t_i, h_i),
+\]
+where \(x_i\) is the input signature, \(y_i\) the output, \(p_i\) the provenance chain, \(c_i\) the cost profile, \(t_i\) the timestamp tuple, and \(h_i\) the canonical cryptographic hash.
+\end{definition}
+
+\begin{definition}[Temporal Action]
+A temporal action is a state transition of the form
+\[
+T_t : (s_t, a_t) \mapsto (s_{t+1}, r_t, \omega_t),
+\]
+where \(s_t\) is a pre-state, \(a_t\) an action specification, \(s_{t+1}\) a post-state, \(r_t\) an observed scalar reward or score, and \(\omega_t\) a telemetry trace.
+\end{definition}
+
+\begin{definition}[Typed Temporal Artifact Graph]
+Persistent memory is modeled as a typed temporal multigraph
+\[
+\graph = (V, E, \tau, \phi),
+\]
+where \(V\) is the set of vertices, \(E\) the set of typed edges, \(\tau\) temporal annotations, and \(\phi\) feature maps including embeddings, scalar metadata, and provenance fields.
+\end{definition}
+
+\begin{definition}[System State]
+At decision epoch \(t\), the runtime state is
+\[
+\state_t = (o_t, m_t, b_t, \graph_t, \hot_t, \cold_t),
+\]
+where \(o_t\) is observation, \(m_t\) retrieved memory, \(b_t\) current budget state, \(\graph_t\) the logical memory graph, \(\hot_t\) the hot execution substrate, and \(\cold_t\) the cold storage substrate.
+\end{definition}
+
+\section{Axiomatic Foundation}
+
+\begin{axiom}[Inference Primacy]
+The local small model \(\pi_{\theta}\) is the sole policy-compression layer within the protocol boundary. No external model may override the control decisions of \(\pi_{\theta}\). All scheduling, retrieval, escalation, and action-selection decisions must enter the system through \(\pi_{\theta}\) or through deterministic transformations of its outputs.
+\end{axiom}
+
+\begin{axiom}[Artifact Immutability]
+Every computationally expensive operation emits a typed, provenance-preserving artifact
+\[
+\alpha_i = (x_i, y_i, p_i, c_i, t_i, h_i).
+\]
+Once written, an artifact is immutable. Any correction, reinterpretation, or superseding result must be recorded as a new artifact linked through typed provenance edges rather than by mutating prior artifacts.
+\end{axiom}
+
+\begin{axiom}[Ephemeral Execution State]
+RAM is treated as execution state rather than durable knowledge. Persistent knowledge must be externalized into artifact storage. Long-lived runtime objects may include model weights, scheduler state, index pages, and mapped storage views. Rollout-local tensors, buffers, and temporary objects must be released, reset, or re-scoped at rollout termination.
+\end{axiom}
+
+\begin{axiom}[Bounded Hierarchical Compute]
+Compute is allocated hierarchically: broad low-cost exploration first, selective deep search second, and strong isolation only where trust boundaries require it. Lightweight sandboxing is the default execution isolation tier for trusted internal routines. Strong isolation is reserved for untrusted or privileged code paths.
+\end{axiom}
+
+\section{Postulates}
+
+\begin{postulate}[Tiered Lakehouse Interoperability]
+Persistent memory is physically partitioned into a hot plane and a cold plane, while logically unified by the typed temporal graph \(\graph\). Retrieval is a projection over graph structure, embeddings, metadata, and provenance across both planes.
+\end{postulate}
+
+\begin{postulate}[Canonical Transition Semantics]
+For every temporal action
+\[
+T_t : (s_t, a_t) \mapsto (s_{t+1}, r_t, \omega_t),
+\]
+the canonical fingerprint is
+\[
+f_t = H(\mathrm{canonical}(s_t, a_t, r_t, \omega_t)),
+\]
+where \(H\) is a collision-resistant hash over a canonical serialization. Embeddings are computed on semantic summaries derived from the canonical tuple, not arbitrary raw memory representations.
+\end{postulate}
+
+\begin{postulate}[Budgeted Metareasoning Scheduler]
+Each pending job \(j\) is assigned a scalar utility score
+\[
+J(j) = \E[\Delta U \mid j] - \lambda_c C(j) - \lambda_m M(j) - \lambda_l L(j),
+\]
+where \(\Delta U\) is expected utility gain, \(C(j)\) compute cost, \(M(j)\) memory pressure, \(L(j)\) latency penalty, and \(\lambda_c,\lambda_m,\lambda_l \ge 0\) are budget multipliers. The scheduler selects
+\[
+j^* = \argmax_j J(j)
+\]
+subject to hard budget constraints.
+\end{postulate}
+
+\begin{postulate}[Calibrated Posterior Output]
+The terminal output of the system is a posterior decision summary
+\[
+P = \{p_k, \mathrm{paths}_k, \mathrm{policies}_k, \mathrm{intervals}_k\},
+\]
+consisting of estimated outcome probabilities, ranked explanatory paths, ranked policies, and uncertainty intervals. The output is probabilistic and must not be represented as unconditional truth.
+\end{postulate}
+
+\section{Architecture}
+
+\subsection{System Overview}
+
+\cellar\ is a single-node, locally orchestrated, multi-runtime system. It is not required to be literally single-process. A practical implementation may include native host code, inference bindings, browser automation processes, lightweight sandbox runtimes, and stronger isolated execution for untrusted paths. What unifies the system is not process count but protocol discipline.
+
+The architecture is divided into a compute plane, a storage plane, and a control plane.
+
+\subsection{Compute Plane}
+
+The compute plane is hierarchical.
+
+\textbf{Tier A: Retrieval and Triage.}  
+This tier gathers and prioritizes information. It may query local artifacts, fetch local or external documents, canonicalize content, extract semantic summaries, and estimate whether further processing is worth the remaining budget.
+
+\textbf{Tier B: Broad Simulation.}  
+This tier performs cheap, wide exploration using coarse substrates such as agent-based models, cellular automata, discrete-event systems, or approximate state-transition engines. The goal is not perfect fidelity. The goal is coverage.
+
+\textbf{Tier C: Deep Search.}  
+Only a minority of high-value states are promoted into deeper search. This tier may use Monte Carlo tree search, progressive widening, heuristic branching, learned priors, or similar selective methods. Search here is an escalation, not a default.
+
+\textbf{Tier D: Isolation.}  
+Trusted routines should execute in the lightest viable substrate. Strong isolation is reserved for untrusted paths only.
+
+\subsection{Storage Plane}
+
+The storage plane is divided into two logical layers.
+
+\textbf{Hot Plane \(\hot\).}  
+The hot plane stores transient execution-near batches, queue-local records, vectorized summaries awaiting compaction, and short-lived computational intermediates. It is optimized for low-latency access and bounded lifetime.
+
+\textbf{Cold Plane \(\cold\).}  
+The cold plane stores immutable or append-safe artifacts, manifests, indices, checkpoints, and provenance records. It is optimized for durability, replayability, structured querying, and efficient storage density.
+
+\subsection{Control Plane}
+
+The control plane centers on the policy model \(\pi_\theta\) and the scheduler \(\Sigma\). The policy proposes actions, estimates value and cost, and interprets retrieved context. The scheduler arbitrates among pending jobs under explicit resource constraints. Together they constitute the bounded metareasoning core of the protocol.
+
+\section{Why This Architecture Is Needed}
+
+The \cellar\ architecture exists because present-day systems typically separate inference, storage, search, and execution traces into loosely connected components. In many practical pipelines, a model call produces text, a retriever produces documents, a vector index stores chunks, and a logging stack stores execution traces. These components coexist, but they rarely share a common formal semantics.
+
+\cellar\ instead insists on a unifying scientific object: the artifact. By elevating the artifact to the primary persistent unit, the protocol forces expensive reasoning to become durable, typed, and replayable. This yields four benefits.
+
+First, it gives memory a stronger semantics than mere caching. Memory becomes a record of computation rather than a passive repository of snippets. Second, it enables posterior reasoning over actual generated evidence rather than untracked internal decisions. Third, it reduces repeated recomputation by preserving intermediate scientific objects. Fourth, it makes the system auditable: claims can be linked to specific artifacts, transitions, and decision traces.
+
+The protocol therefore improves not only performance pathways but epistemic discipline. Its improvement over ad hoc agent stacks is not that it invents each primitive from scratch, but that it binds them into one accountable runtime.
+
+\section{Propositions, Lemmas, and Corollaries}
+
+\begin{proposition}[Confidence-Driven Branch Pruning]
+Suppose rewards are bounded and rollout estimates satisfy a concentration condition under repeated sampling. Then the probability that a genuinely suboptimal branch remains above a pruning threshold decreases as rollout count increases.
+\end{proposition}
+
+\begin{proof}[Discussion]
+This statement is intentionally qualitative rather than asymptotically sharp. It formalizes the intuition behind upper-confidence or posterior-guided search: more evidence shrinks uncertainty, which makes persistent overvaluation of weak branches less likely. The proposition does not claim a universal closed-form rate without additional assumptions about dependence, reward distributions, and pruning rules.
+\end{proof}
+
+\begin{proposition}[Indexed Deduplication Efficiency]
+Assume exact artifact identity is checked by hash lookup and approximate semantic similarity is screened through a sublinear index. Then artifact insertion decomposes into constant-expected-time exact duplicate rejection and sublinear candidate screening, with total practical cost governed by index maintenance and batch size.
+\end{proposition}
+
+\begin{proof}[Discussion]
+The protocol does not require a specific asymptotic law for every implementation. Instead, it requires the decomposition of insertion into exact identity, semantic proximity, and append or merge decision. This is sufficient for engineering design and avoids overclaiming theoretical uniformity across indexing schemes.
+\end{proof}
+
+\begin{proposition}[Coupled Coarse-to-Fine Variance Reduction]
+If broad simulation and deep-search estimators can be statistically coupled so that the residual between coarse and fine estimators decays with level, then multilevel estimation may reduce total cost relative to pure fine-level estimation for a fixed error target.
+\end{proposition}
+
+\begin{proof}[Discussion]
+This proposition states a conditional opportunity, not an automatic theorem of the runtime. The architecture supports such coupling; it does not guarantee it. Achieving the benefit requires explicit estimator design, diagnostic testing, and empirical variance characterization.
+\end{proof}
+
+\begin{lemma}[Artifact Monotonicity]
+If artifacts are immutable and all corrections are represented as appended superseding artifacts linked through provenance edges, then the epistemic history of the system remains replayable.
+\end{lemma}
+
+\begin{proof}
+Because artifacts are never destructively rewritten, each computational state that produced a durable claim remains represented in the artifact graph. Supersession affects interpretation but does not erase prior evidence. Therefore the historical chain of belief formation can be reconstructed by traversing provenance and supersession edges.
+\end{proof}
+
+\begin{lemma}[Policy-Externalized Capability]
+If \(\theta\) is fixed and any of \(R\), \(S\), \(A\), or \(B\) improves, then \(\Ieff\) may increase without retraining the base model.
+\end{lemma}
+
+\begin{proof}[Discussion]
+This follows directly from the systems-level form
+\[
+\Ieff \approx f(\theta, R, S, A, B).
+\]
+The statement is modal rather than universal: it claims possibility, not inevitability. It captures the central architectural thesis that capability amplification can emerge from better retrieval, memory, simulation, or scheduling.
+\end{proof}
+
+\begin{corollary}[Retrieval Priority]
+For an ingestible source \(u\), a practical priority rule is
+\[
+\mathrm{priority}(u) = \alpha \cdot \mathrm{novelty}(u) + \beta \cdot \E[U(u)] - \gamma \cdot C_{\mathrm{fetch}}(u),
+\]
+with novelty estimated from graph-local divergence, embedding distance, or missing-coverage heuristics.
+\end{corollary}
+
+\begin{corollary}[Isolation Discipline]
+If trust boundaries are explicitly modeled, then lightweight sandboxing suffices for the majority of internal routines, while strong isolation should be reserved for untrusted or privileged code paths.
+\end{corollary}
+
+\begin{corollary}[Posterior Convergence Termination]
+Execution may terminate when either hard budget is exhausted or successive posterior estimates differ by less than a prescribed threshold, for example
+\[
+\KL(P_t \,\|\, P_{t+1}) \le \varepsilon.
+\]
+\end{corollary}
+
+\section{Correlations and Layered Relationships}
+
+This section explains how the axioms, postulates, propositions, and algorithms relate structurally.
+
+\subsection{Axiom-to-Architecture Correlation}
+
+\textbf{Axiom 1} grounds the control plane. If inference primacy fails, the protocol loses internal coherence because the scheduler and execution layers would no longer be governed by a single policy interface.
+
+\textbf{Axiom 2} grounds the storage plane. If artifacts are mutable, then replayability and posterior audit degrade into ambiguous historical state.
+
+\textbf{Axiom 3} grounds memory discipline. If execution state is allowed to accumulate uncontrolled durable knowledge in RAM, then the system becomes difficult to reset, reproduce, and bound.
+
+\textbf{Axiom 4} grounds the compute hierarchy. If every state is sent to deep search or strong isolation, the system becomes economically unstable and conceptually loses its broad-then-selective structure.
+
+\subsection{Postulate-to-Algorithm Correlation}
+
+\textbf{Postulate 1} underlies retrieval and memory projection. Every retrieval algorithm is a graph projection across hot and cold planes.
+
+\textbf{Postulate 2} underlies hashing, deduplication, and transition recording. Without canonical transition semantics, artifact identity becomes non-repeatable.
+
+\textbf{Postulate 3} underlies scheduler design. It operationalizes metareasoning into a value-of-information problem constrained by compute, memory, and latency.
+
+\textbf{Postulate 4} underlies output discipline. It makes the protocol epistemically scientific by requiring posterior summaries rather than unqualified assertions.
+
+\subsection{Proposition-to-Algorithm Correlation}
+
+Proposition 1 supports the pruning steps in deep search.  
+Proposition 2 supports the insert pipeline in artifact emission.  
+Proposition 3 supports any attempt to couple broad and deep tiers for estimation efficiency.  
+Lemma 1 supports replay and audit.  
+Lemma 2 supports the claim that architectural improvements can raise capability without changing the base model weights.
+
+\section{State of the Art and What CELLAR Extends}
+
+\subsection{How Related Systems Work Today}
+
+Modern local inference systems are already strong at efficient model execution, but they are not by themselves formal scientific runtimes. Quantized local engines focus on inference throughput, memory layout, and hardware utilization. High-throughput serving stacks focus on batching, KV-cache efficiency, and scheduling of requests. Browser automation stacks focus on reliable interaction with real web surfaces. Lakehouse systems focus on columnar storage, query execution, and vector retrieval. Search-augmented reasoning systems focus on branching and evaluation over candidate reasoning paths.
+
+Each of these areas is mature enough to support parts of \cellar. What remains uncommon is the formal synthesis.
+
+\subsection{What CELLAR Preserves}
+
+\cellar\ preserves the following state-of-the-art patterns:
+\begin{itemize}[leftmargin=1.5em]
+    \item local small-model inference as the fast control substrate;
+    \item lakehouse-backed persistence for structured and vector-centric records;
+    \item browser-grounded acquisition for real-world evidence collection;
+    \item selective tree search or bounded planning for high-value deliberation;
+    \item sandboxing and trust-tiered execution for controlled tool use.
+\end{itemize}
+
+\subsection{What CELLAR Extends}
+
+\cellar\ extends the state of the art in five principal ways.
+
+First, it makes the artifact the central persistent object of cognition. Second, it binds retrieval, simulation, search, storage, and posteriorization into one formal protocol. Third, it defines a stronger memory semantics through a typed temporal multigraph. Fourth, it explicitly separates epistemic output from metaphysical truth by requiring posterior summaries. Fifth, it treats the small model as a policy over cognition rather than as the entirety of cognition.
+
+These are conceptual extensions, but they have implementation consequences. They alter what is stored, how computation is budgeted, and how results are represented.
+
+\section{Implementation Notes}
+
+\subsection{Policy Engine Design}
+
+The policy model should produce structured directives rather than unconstrained free-form text wherever control decisions matter. A practical implementation may use typed action schemas, confidence estimates, and budget-aware prompting or auxiliary cost heads. Deterministic or near-deterministic decoding is preferable in scheduler-critical pathways.
+
+\subsection{Canonicalization}
+
+Artifact identity depends on canonicalization. A conforming implementation should specify:
+\begin{itemize}[leftmargin=1.5em]
+    \item stable field ordering,
+    \item explicit numeric normalization,
+    \item typed serialization formats,
+    \item versioned canonical schemas,
+    \item deterministic hashing over canonical records.
+\end{itemize}
+
+Without these, artifact identity will drift across platforms or versions.
+
+\subsection{Deduplication Pipeline}
+
+A practical insert pipeline proceeds in six steps:
+\begin{enumerate}[leftmargin=1.5em]
+    \item exact hash lookup,
+    \item semantic candidate retrieval,
+    \item type-aware merge or append decision,
+    \item hot-plane insertion,
+    \item scheduled flush to cold storage,
+    \item graph-edge materialization and provenance update.
+\end{enumerate}
+
+This pipeline avoids conflating exact duplicates with semantically similar but distinct artifacts.
+
+\subsection{Rollout Memory Discipline}
+
+Rollouts should execute inside resettable arenas, scoped allocators, or equivalent memory regions. The protocol does not require a specific language, but it does require that rollout-local computational residue be bounded and releasable.
+
+\subsection{Isolation Policy}
+
+The protocol does not endorse strong isolation for all internal routines. That would erase much of the efficiency gained by hierarchical compute. Instead, it recommends a trust-tiered design:
+\begin{itemize}[leftmargin=1.5em]
+    \item native or minimal runtime for internal deterministic routines,
+    \item lightweight sandboxing for trusted extension modules,
+    \item stronger isolation only for untrusted or privilege-bearing code.
+\end{itemize}
+
+\subsection{Posterior Construction}
+
+Posterior construction should be explicit. The implementation should record how probabilities were estimated, what trajectories or samples contributed to them, and what uncertainty method was used. Bootstrap intervals, repeated rollout ensembles, or sequential estimation methods are all acceptable if documented and reproducible.
+
+\section{Algorithm Design}
+
+\begin{algorithm}[h]
+\caption{CELLAR Orchestrator}
+\begin{algorithmic}[1]
+\Require query \(q\), budget \(\budget=(C_{\max},M_{\max},L_{\max})\), policy model \(\theta\), initial graph \(\graph_0\)
+\Ensure posterior summary \(P\)
+\State \(\graph \gets \graph_0\)
+\State \(\hot \gets \emptyset\)
+\State \(\cold \gets \text{cold storage substrate}\)
+\While{budget remains and convergence not reached}
+    \State \(j^* \gets \argmax_j J(j)\)
+    \State dispatch \(j^*\) by tier
+    \State emit artifacts for all expensive operations
+    \State flush hot batches when policy or capacity requires
+    \State reset rollout-local execution state
+\EndWhile
+\State \(P \gets \mathrm{PosteriorCollapse}(\graph, \text{trajectory summaries})\)
+\State \Return \(P\)
+\end{algorithmic}
+\end{algorithm}
+
+\begin{algorithm}[h]
+\caption{Temporal Action}
+\begin{algorithmic}[1]
+\Require state \(s_t\), action \(a_t\)
+\Ensure artifact \(\alpha_t\)
+\State \((s_{t+1}, r_t, \omega_t) \gets T_t(s_t, a_t)\)
+\State \(f_t \gets H(\mathrm{canonical}(s_t, a_t, r_t, \omega_t))\)
+\State \(\alpha_t \gets (x=s_t, y=s_{t+1}, p, c, t, h=f_t)\)
+\State optionally derive semantic summary embedding
+\State \Return \(\alpha_t\)
+\end{algorithmic}
+\end{algorithm}
+
+\begin{algorithm}[h]
+\caption{Budgeted Scheduler}
+\begin{algorithmic}[1]
+\Require pending jobs \(\mathcal{J}\)
+\Ensure selected job \(j^*\)
+\ForAll{\(j \in \mathcal{J}\)}
+    \State compute \(J(j)=\E[\Delta U \mid j]-\lambda_c C(j)-\lambda_m M(j)-\lambda_l L(j)\)
+\EndFor
+\State \(j^* \gets \argmax_j J(j)\)
+\State \Return \(j^*\)
+\end{algorithmic}
+\end{algorithm}
+
+\begin{algorithm}[h]
+\caption{Broad Simulation}
+\begin{algorithmic}[1]
+\Require initial coarse state \(s_0\), horizon \(T\)
+\Ensure coarse trajectory summary
+\State \(s \gets s_0\)
+\For{\(t = 1\) to \(T\)}
+    \State retrieve \(m_t\)
+    \State \(a_t \gets \pi_\theta(s_t, m_t, b_t)\)
+    \State \((s_{t+1}, r_t, \omega_t) \gets T_t(s_t, a_t)\)
+    \State emit temporal artifact
+    \State mark promising states for deep-search promotion if justified
+\EndFor
+\State \Return summarized coarse trajectory
+\end{algorithmic}
+\end{algorithm}
+
+\begin{algorithm}[h]
+\caption{Deep Search}
+\begin{algorithmic}[1]
+\Require promoted state \(s\)
+\Ensure deep-search estimate \(\hat{Q}\)
+\State initialize root node from \(s\)
+\While{budget allows}
+    \State select candidate node via confidence-aware tree policy
+    \State derive action priors or abstractions via \(\pi_\theta\)
+    \State execute rollout in trusted or isolated runtime
+    \State backpropagate reward estimate
+    \State prune weak branches when evidence justifies
+    \State emit rollout and node-summary artifacts
+\EndWhile
+\State aggregate node values into \(\hat{Q}\)
+\State \Return \(\hat{Q}\)
+\end{algorithmic}
+\end{algorithm}
+
+\begin{algorithm}[h]
+\caption{Posterior Collapse}
+\begin{algorithmic}[1]
+\Require \(N\) trajectory summaries or outcome samples
+\Ensure posterior summary \(P\)
+\ForAll{outcomes \(k\)}
+    \State \(\hat{p}_k \gets \frac{1}{N}\sum_{i=1}^N \mathbf{1}(\mathrm{outcome}_i = k)\)
+\EndFor
+\State derive ranked policies from aggregate scores
+\State derive explanatory paths from subgraphs of \(\graph\)
+\State estimate uncertainty intervals by resampling or equivalent method
+\State package posterior summary with provenance references
+\State \Return \(P\)
+\end{algorithmic}
+\end{algorithm}
+
+\section{Formal Layering of the Protocol}
+
+The protocol may be read as a stack of five mathematical layers.
+
+\subsection{Layer I: Policy Layer}
+\[
+\pi_\theta(o_t,m_t,b_t)\mapsto(u_t,q_t,\hat V_t,\hat C_t).
+\]
+This layer compresses local inference into bounded directives and uncertainty-aware control suggestions.
+
+\subsection{Layer II: Transition Layer}
+\[
+T_t:(s_t,a_t)\mapsto(s_{t+1},r_t,\omega_t).
+\]
+This layer formalizes dynamics, whether simulated, retrieved, or executed through tools.
+
+\subsection{Layer III: Artifact Layer}
+\[
+\alpha_i=(x_i,y_i,p_i,c_i,t_i,h_i).
+\]
+This layer turns expensive operations into durable scientific objects.
+
+\subsection{Layer IV: Graph Layer}
+\[
+\graph=(V,E,\tau,\phi).
+\]
+This layer integrates artifacts, entities, states, and provenance into one navigable memory structure.
+
+\subsection{Layer V: Posterior Layer}
+\[
+P=\{p_k,\mathrm{paths}_k,\mathrm{policies}_k,\mathrm{intervals}_k\}.
+\]
+This layer yields the terminal epistemic object of the protocol: a calibrated posterior summary.
+
+Each layer depends on the previous one. Inference proposes actions, actions generate transitions, transitions emit artifacts, artifacts populate the graph, and graph-grounded trajectories collapse into posterior summaries.
+
+\section{Scientific Method Within CELLAR}
+
+The protocol should be understood as a computational scientific method rather than as a mere engineering stack. Its cycle is:
+
+\begin{enumerate}[leftmargin=1.5em]
+    \item generate hypotheses or candidate actions,
+    \item gather or retrieve evidence,
+    \item simulate or execute bounded alternatives,
+    \item score outcomes,
+    \item preserve all expensive evidence as artifacts,
+    \item aggregate into posterior belief,
+    \item stop when budget is exhausted or convergence is achieved.
+\end{enumerate}
+
+This cycle corresponds more closely to scientific inquiry than to direct generation. The improvement is not simply that the system may become more accurate in some empirical setting. The improvement is that the path from question to answer becomes inspectable, replayable, and revisable.
+
+\section{Epistemic Limits}
+
+\cellar\ does not and cannot certify absolute truth. It remains a bounded protocol operating under incomplete evidence, finite compute, imperfect simulators, and fallible policy priors. Several limitations follow.
+
+First, posterior quality depends on the quality of retrieval, simulation design, and scoring. Second, semantically plausible artifacts may still encode biased or incomplete evidence. Third, confidence estimates may be miscalibrated if auxiliary estimators are poorly trained or heuristically defined. Fourth, causal paths extracted from the graph are explanatory structures, not infallible proofs of causation.
+
+These limits are not failures of the protocol. They are part of its scientific honesty. By expressing them explicitly, \cellar\ becomes stronger, not weaker.
+
+\section{Conformance Requirements}
+
+An implementation may claim conformance with \cellar\ v1.0 only if it satisfies the following:
+
+\begin{enumerate}[leftmargin=1.5em]
+    \item one local policy model governs control decisions;
+    \item expensive operations emit immutable typed artifacts;
+    \item durable knowledge is externalized beyond rollout-local execution state;
+    \item scheduling is budget-aware;
+    \item outputs are posterior in form and include uncertainty or equivalent calibration;
+    \item provenance is preserved across artifacts and summaries;
+    \item trust tiers are explicitly defined;
+    \item hierarchical compute is used.
+\end{enumerate}
+
+\section{Conclusion}
+
+\cellar\ advances a single systems claim: a small local model can become materially more capable when embedded in an artifact-centric, simulation-augmented, budget-aware runtime. The protocol does not seek to replace modern inference engines, storage layers, browser runtimes, or search frameworks. Instead, it formalizes how they may be composed into a scientific method for local machine reasoning.
+
+Its deepest contribution is epistemic. It reframes local AI from one-shot generation toward durable computational inquiry. In \cellar, inference is the controller, artifacts are the memory, simulation is the branching instrument, and the posterior is the honest output. What emerges is not certainty, but a stronger discipline of reasoning.
+
+\section*{Acknowledgment of Scope}
+
+This document is a formal whitepaper-style specification. It is not a claim that a public implementation, benchmark suite, or production release already exists. Any empirical validation, software release, or benchmarking study should be presented separately and measured directly rather than inferred from the formalism alone.
+
+\begin{thebibliography}{99}
+
+\bibitem{lats}
+Zhou, A., et al. \emph{Language Agent Tree Search Unifies Reasoning, Acting, and Planning in Language Models}. arXiv preprint, 2023.
+
+\bibitem{biodynamo}
+Breitwieser, L., et al. \emph{BioDynaMo: A General Platform for Scalable Agent-Based Simulation}. arXiv preprint, 2023.
+
+\bibitem{mlmc}
+Giles, M. B. \emph{Multilevel Monte Carlo Path Simulation}. Operations Research, 56(3), 2008.
+
+\bibitem{arrow}
+Apache Arrow Documentation. \url{https://arrow.apache.org/}
+
+\bibitem{duckdb}
+DuckDB Documentation. \url{https://duckdb.org/}
+
+\bibitem{lancedb}
+LanceDB Documentation. \url{https://lancedb.github.io/lancedb/}
+
+\bibitem{playwright}
+Playwright Documentation. \url{https://playwright.dev/}
+
+\bibitem{wasmtime}
+Wasmtime Documentation. \url{https://docs.wasmtime.dev/}
+
+\bibitem{firecracker}
+Firecracker Documentation. \url{https://firecracker-microvm.github.io/}
+
+\bibitem{vllm}
+vLLM Documentation. \url{https://docs.vllm.ai/}
+
+\bibitem{llamacpp}
+llama.cpp Repository. \url{https://github.com/ggml-org/llama.cpp}
+
+\bibitem{smallmodels}
+\emph{Small Language Models are the Future of Agentic AI}. arXiv preprint, 2025.
+
+\end{thebibliography}
+
+\end{document}

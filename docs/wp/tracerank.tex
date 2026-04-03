@@ -1,0 +1,634 @@
+\begin{filecontents*}{refs.bib}
+    @online{openai_gptoss20b,
+      title   = {gpt-oss-20b Model},
+      author  = {{OpenAI}},
+      year    = {2026},
+      url     = {https://developers.openai.com/api/docs/models/gpt-oss-20b},
+      urldate = {2026-03-21},
+      note    = {OpenAI Developers model page}
+    }
+    
+    @online{openai_ollama_guide,
+      title   = {How to Run gpt-oss Locally with Ollama},
+      author  = {{OpenAI}},
+      year    = {2025},
+      url     = {https://developers.openai.com/cookbook/articles/gpt-oss/run-locally-ollama},
+      urldate = {2026-03-21},
+      note    = {OpenAI Developers cookbook}
+    }
+    
+    @online{openai_harmony,
+      title   = {OpenAI Harmony Response Format},
+      author  = {{OpenAI}},
+      year    = {2025},
+      url     = {https://developers.openai.com/cookbook/articles/openai-harmony},
+      urldate = {2026-03-21},
+      note    = {OpenAI Developers cookbook}
+    }
+    
+    @online{openai_verify,
+      title   = {Verifying gpt-oss Implementations},
+      author  = {{OpenAI}},
+      year    = {2025},
+      url     = {https://developers.openai.com/cookbook/articles/gpt-oss/verifying-implementations},
+      urldate = {2026-03-21},
+      note    = {OpenAI Developers cookbook}
+    }
+    
+    @online{ollama_modelfile,
+      title   = {Modelfile Reference},
+      author  = {{Ollama}},
+      year    = {2026},
+      url     = {https://docs.ollama.com/modelfile},
+      urldate = {2026-03-21}
+    }
+    
+    @online{ollama_structured,
+      title   = {Structured Outputs},
+      author  = {{Ollama}},
+      year    = {2026},
+      url     = {https://docs.ollama.com/capabilities/structured-outputs},
+      urldate = {2026-03-21}
+    }
+    
+    @online{ollama_faq,
+      title   = {FAQ},
+      author  = {{Ollama}},
+      year    = {2026},
+      url     = {https://docs.ollama.com/faq},
+      urldate = {2026-03-21}
+    }
+    
+    @online{ollama_import,
+      title   = {Importing a Model},
+      author  = {{Ollama}},
+      year    = {2026},
+      url     = {https://docs.ollama.com/import},
+      urldate = {2026-03-21}
+    }
+    
+    @online{litellm_ollama,
+      title   = {Ollama Provider Docs},
+      author  = {{LiteLLM}},
+      year    = {2026},
+      url     = {https://docs.litellm.ai/docs/providers/ollama},
+      urldate = {2026-03-21}
+    }
+    
+    @online{langfuse_ollama,
+      title   = {Ollama Observability and Tracing for Local LLMs Using Langfuse},
+      author  = {{Langfuse}},
+      year    = {2026},
+      url     = {https://langfuse.com/integrations/model-providers/ollama},
+      urldate = {2026-03-21}
+    }
+    
+    @online{optuna_multi,
+      title   = {Multi-objective Optimization with Optuna},
+      author  = {{Optuna}},
+      year    = {2026},
+      url     = {https://optuna.readthedocs.io/en/stable/tutorial/20_recipes/002_multi_objective.html},
+      urldate = {2026-03-21}
+    }
+    
+    @online{mlxtune_readme,
+      title   = {mlx-tune README},
+      author  = {{ARahim3}},
+      year    = {2026},
+      url     = {https://github.com/ARahim3/mlx-tune},
+      urldate = {2026-03-21},
+      note    = {Documents limitation that GGUF export does not work directly from quantized 4-bit base models}
+    }
+    \end{filecontents*}
+    
+    \documentclass[11pt]{article}
+    \usepackage[margin=1in]{geometry}
+    \usepackage[T1]{fontenc}
+    \usepackage[utf8]{inputenc}
+    \usepackage{lmodern}
+    \usepackage{microtype}
+    \usepackage{setspace}
+    \usepackage{amsmath,amssymb,amsthm,mathtools}
+    \usepackage{bm}
+    \usepackage{booktabs,longtable,array,tabularx,multirow}
+    \usepackage{enumitem}
+    \usepackage{xcolor}
+    \usepackage{listings}
+    \usepackage{hyperref}
+    \usepackage[nameinlink,noabbrev]{cleveref}
+    \usepackage{algorithm}
+    \usepackage{algpseudocode}
+    \usepackage{tikz}
+    \usepackage{pgfplots}
+    \pgfplotsset{compat=1.18}
+    \usepackage{float}
+    \usepackage{csquotes}
+    \usepackage[backend=biber,style=ieee]{biblatex}
+    \addbibresource{refs.bib}
+    
+    \hypersetup{
+      colorlinks=true,
+      linkcolor=blue!50!black,
+      citecolor=blue!50!black,
+      urlcolor=blue!60!black,
+      pdftitle={TraceRank v3: A Harmony-Aware Observability and Optimization Layer for gpt-oss-20b on Ollama},
+      pdfauthor={Dylan Kawalec},
+      pdfsubject={Internal white paper},
+      pdfkeywords={TraceRank, gpt-oss-20b, Ollama, observability, optimization, Harmony, LoRA}
+    }
+    
+    \definecolor{codebg}{RGB}{247,248,250}
+    \lstdefinestyle{tracerank}{
+      backgroundcolor=\color{codebg},
+      basicstyle=\ttfamily\small,
+      breaklines=true,
+      frame=single,
+      columns=fullflexible,
+      keepspaces=true,
+      showstringspaces=false
+    }
+    
+    \newtheorem{definition}{Definition}
+    \newtheorem{proposition}{Proposition}
+    \newtheorem{remark}{Remark}
+    
+    \title{\textbf{TraceRank v3}\\[0.4em]
+    \large A Harmony-Aware Observability and Optimization Layer for \texttt{gpt-oss-20b} on Ollama}
+    \author{Dylan Kawalec}
+    \date{March 21, 2026}
+    
+    \begin{document}
+    \maketitle
+    \begin{center}
+    \textit{Internal white paper --- publication-ready draft}
+    \end{center}
+    
+    \begin{abstract}
+    TraceRank is a sidecar observability and optimization system for \texttt{gpt-oss-20b} running on Ollama. Its purpose is to transform local inference from a black-box request/response loop into a measurable, benchmarkable, and tunable runtime without replacing the base inference engine. TraceRank captures streaming inference events, serializes them into both human-readable ASCII traces and machine-readable JSONL, computes structural diagnostics over runs, and supports offline optimization and adapter-evaluation workflows. The design is intentionally scoped to \texttt{gpt-oss-20b} because OpenAI positions it as a medium-sized open-weight reasoning model for low-latency, local, or specialized use cases, with 21B parameters and 3.6B active parameters \cite{openai_gptoss20b}. OpenAI also states that the \texttt{gpt-oss} family was trained on the Harmony response format and that Harmony semantics should be preserved in custom inference implementations; when using a provider such as Ollama, the serving stack handles the formatting \cite{openai_harmony,openai_ollama_guide}.
+    
+    TraceRank does not assume privileged access to hidden activations through Ollama. Instead, it treats inference as an observable process over documented surfaces: streamed deltas, structured outputs, runtime timings, adapter selection, Modelfile configuration, and repeated-run behavior \cite{ollama_structured,ollama_modelfile,ollama_faq}. The central claim of this paper is that a local model run should be treated as a traceable geometric process rather than only as a final string. TraceRank operationalizes that claim for \texttt{gpt-oss-20b} on Ollama through a versioned event schema, a trace-conditioned rank diagnostic, a benchmark protocol, and a gated promotion pipeline for configuration and adapter candidates.
+    \end{abstract}
+    
+    \section{Introduction}
+    Open-weight local inference has become practical, yet operational visibility still lags behind capability. Most local deployments expose request logs, latency, and occasional validity checks. What they do not expose clearly is whether the model's behavior path remains structurally rich or collapses into narrow, repetitive, or unstable modes. TraceRank addresses that gap. It is not an alternative inference engine. It is a \emph{control-plane and observability layer} around Ollama for \texttt{gpt-oss-20b} \cite{openai_ollama_guide}.
+    
+    This scope is deliberate. OpenAI positions \texttt{gpt-oss-20b} for low-latency local deployment and specialized workflows, and its open-weight nature makes it suitable for sidecar instrumentation, repeated benchmarking, and developer-controlled adaptation workflows \cite{openai_gptoss20b}. The family is also Harmony-trained, which has concrete implications for formatting, tool calls, and reasoning segmentation \cite{openai_harmony,openai_verify}.
+    
+    \subsection{Problem statement}
+    A model can continue producing fluent text while already drifting toward lower-diversity, over-concentrated, or brittle behavior. Traditional metrics often miss this early degradation. TraceRank asks a more structural question:
+    \begin{equation}
+    \text{Did the inference preserve rich structure, or did it collapse?}
+    \end{equation}
+    
+    The purpose of TraceRank is to answer that question in a way that is:
+    \begin{enumerate}[label=\arabic*.]
+      \item observable in real time,
+      \item serializable for machines and humans,
+      \item benchmarkable across repeated runs, and
+      \item actionable for optimization and adapter evaluation.
+    \end{enumerate}
+    
+    \section{Scope, assumptions, and claim discipline}
+    This white paper is intentionally limited to the following deployment target:
+    \begin{itemize}
+      \item \textbf{Base model:} \texttt{gpt-oss-20b}
+      \item \textbf{Serving engine:} Ollama
+      \item \textbf{Primary interface:} Ollama API, optionally fronted by LiteLLM
+      \item \textbf{Trace sink:} local JSONL and optional Langfuse
+      \item \textbf{Optimization layer:} offline or scheduled Optuna studies
+      \item \textbf{Adapter workflow:} candidate-based LoRA/adaptation evaluation, with Ollama \texttt{ADAPTER} integration where format compatibility permits
+    \end{itemize}
+    
+    The design does \emph{not} claim universal support for every Ollama-served model, every adapter format, or every training/export path. In particular, the \texttt{mlx-tune} project documents a known limitation: GGUF export does not work directly from quantized 4-bit base models, so any production-grade adapter workflow that targets Ollama must explicitly account for base-model format and export compatibility \cite{mlxtune_readme}.
+    
+    \subsection{Claim ladder}
+    Every externally stated claim in TraceRank should be labeled as one of the following:
+    \begin{description}[leftmargin=2.2cm,style=nextline]
+      \item[Documented] Supported by official product or project documentation.
+      \item[Implemented] Present in the codebase and reproducibly runnable.
+      \item[Benchmarked] Measured under a published benchmark protocol with reported methodology.
+      \item[Experimental] Plausible but not yet fully validated.
+    \end{description}
+    
+    This claim ladder prevents mixing architectural possibility with measured evidence.
+    
+    \section{Why \texttt{gpt-oss-20b} on Ollama}
+    OpenAI describes \texttt{gpt-oss-20b} as a medium-sized open-weight model for low latency and local deployment, with 21B parameters and 3.6B active parameters \cite{openai_gptoss20b}. OpenAI's Ollama guide states that \texttt{gpt-oss} can be run locally through Ollama on consumer hardware and that Ollama handles the Harmony formatting layer for developers using that stack \cite{openai_ollama_guide}. Harmony matters because OpenAI states that the \texttt{gpt-oss} family was trained on the Harmony response format for conversation structure, reasoning output, and function-call structure \cite{openai_harmony}.
+    
+    One practical implementation note is quantization. OpenAI's Ollama guide states that \texttt{gpt-oss} in Ollama is distributed in MXFP4 quantization out of the box. Therefore TraceRank avoids hard-coding unsupported quantization assumptions into the systems design \cite{openai_ollama_guide}.
+    
+    \section{Design thesis}
+    TraceRank is built around three ideas.
+    \begin{enumerate}[label=\arabic*.]
+      \item An inference run is more than a reply. It is a sequence of observable events: request metadata, streamed deltas, structured fields, timings, and completion markers.
+      \item Structural degradation often appears before obvious quality degradation.
+      \item Observability must serve both humans and machines.
+    \end{enumerate}
+    
+    Accordingly, TraceRank writes every run into dual forms:
+    \begin{enumerate}[label=\alph*.]
+      \item a human-readable ASCII trace, and
+      \item a machine-readable JSONL event stream.
+    \end{enumerate}
+    
+    \section{Mathematical model}
+    \subsection{Inference as an observable transformation chain}
+    Let an input session state be denoted by $x$. An observable inference run is modeled as
+    \begin{equation}
+      x \xrightarrow{T_1} h_1 \xrightarrow{T_2} h_2 \xrightarrow{\cdots} h_L = z
+    \end{equation}
+    where each $h_k$ is an \emph{observable stage representation} and $z$ is the final trace vector. The composite map is
+    \begin{equation}
+      F = T_L \circ T_{L-1} \circ \cdots \circ T_1.
+    \end{equation}
+    
+    The stages $h_k$ are not hidden activations. They are derived from observable surfaces such as token deltas, time intervals, structured field states, cache status, tool-related events, and summary features.
+    
+    \begin{definition}[Local singularity]
+    A run exhibits \emph{local singularity} when the effective observable transformation loses expected degrees of freedom:
+    \begin{equation}
+    \operatorname{rank}(J_F(x)) < r_* ,
+    \end{equation}
+    where $r_*$ is the expected operational rank.
+    \end{definition}
+    
+    Because Ollama does not expose internal tensor states through the standard API, TraceRank estimates rank through \emph{observable rank surrogates}, such as repeated-run perturbations, stage projection matrices, and trace-feature covariance.
+    
+    \subsection{Concentration}
+    Let the vectorized trace be
+    \begin{equation}
+      z = (z_1, z_2, \dots, z_d).
+    \end{equation}
+    Define
+    \begin{equation}
+      p_i = \frac{|z_i|}{\sum_j |z_j|}
+    \end{equation}
+    and entropy
+    \begin{equation}
+      H(z) = -\sum_{i=1}^{d} p_i \log p_i.
+    \end{equation}
+    Then define normalized concentration
+    \begin{equation}
+      C(z) = 1 - \frac{H(z)}{\log d}.
+    \end{equation}
+    High $C(z)$ indicates narrow or repetitive trace behavior. Low $C(z)$ indicates distributed behavior.
+    
+    \subsection{Trace graph}
+    Let each run induce a directed weighted graph $G=(V,E)$ where nodes correspond to stages such as request-init, stream-start, structured-output transitions, tool-related segments, and completion states. The adjacency matrix is
+    \begin{equation}
+    A_{ij} =
+    \begin{cases}
+      w_{ij}, & (i,j)\in E \\
+      0, & \text{otherwise.}
+    \end{cases}
+    \end{equation}
+    TraceRank measures graph collapse using quantities such as
+    \begin{equation}
+      \gamma_A = 1 - \frac{\operatorname{rank}(A)}{|V|}
+    \end{equation}
+    and dominant transition concentration.
+    
+    \subsection{Composite structural score}
+    The structural score is
+    \begin{equation}
+      S = \omega_1 C(z) + \omega_2 \gamma_A + \omega_3 \kappa_{\text{obs}} + \omega_4 D_{\text{run}},
+    \end{equation}
+    where:
+    \begin{itemize}
+      \item $C(z)$ is concentration,
+      \item $\gamma_A$ is graph collapse,
+      \item $\kappa_{\text{obs}}$ is an observable conditioning surrogate,
+      \item $D_{\text{run}}$ is repeated-run instability.
+    \end{itemize}
+    A high $S$ indicates elevated collapse risk, narrow routing, or unstable behavior.
+    
+    \section{System architecture}
+    TraceRank is designed as a layered sidecar around Ollama:
+    \begin{enumerate}[label=\arabic*.]
+      \item \textbf{Ollama} remains the inference engine.
+      \item \textbf{Collector} subscribes to request and stream events.
+      \item \textbf{ASCII renderer} writes live traces.
+      \item \textbf{JSON serializer} emits normalized event lines.
+      \item \textbf{Analytics engine} computes structural scores and benchmark summaries.
+      \item \textbf{Optimization engine} runs offline or scheduled parameter search.
+      \item \textbf{Adapter evaluator} tests candidate adapters and only promotes them through a gated process.
+    \end{enumerate}
+    
+    Optional components include LiteLLM as an OpenAI-compatible proxy and request normalization layer, Langfuse as a trace sink and evaluation interface, and Optuna for multi-objective search \cite{litellm_ollama,langfuse_ollama,optuna_multi}.
+    
+    \section{Harmony-aware runtime interpretation}
+    OpenAI states that the \texttt{gpt-oss} models were trained on Harmony and that providers such as Ollama handle the formatting layer in that deployment mode \cite{openai_harmony,openai_ollama_guide}. TraceRank therefore treats the runtime as \emph{Harmony-aware} even though the low-level formatting is not recreated by TraceRank itself.
+    
+    This leads to a concrete systems rule:
+    \begin{quote}
+    When TraceRank runs behind Ollama, it records behavior at the API and stream layer while assuming Harmony compliance is enforced upstream by the serving stack.
+    \end{quote}
+    
+    If TraceRank is later adapted to lower-level serving stacks, Harmony segmentation must become an explicit responsibility of the trace parser and serializer.
+    
+    \section{Versioned event schema}
+    TraceRank v3 uses a versioned schema. A recommended core event is shown in \cref{lst:event}.
+    
+    \begin{lstlisting}[style=tracerank,caption={Core TraceRank event schema.},label={lst:event}]
+    {
+      "schema_version": "3.0.0",
+      "trace_id": "uuid",
+      "run_id": "uuid",
+      "model": "gpt-oss-20b",
+      "adapter": null,
+      "source_layer": "ollama_stream",
+      "format_family": "harmony-aware",
+      "event_type": "delta",
+      "seq": 42,
+      "ts_ns": 1742600000000000000,
+      "content": "...",
+      "structured_fragment": null,
+      "prompt_eval_count": 245,
+      "eval_count": 143,
+      "prompt_eval_duration_ns": 123456789,
+      "eval_duration_ns": 612000000,
+      "total_duration_ns": 735000000,
+      "done_reason": "stop",
+      "cache_status": "miss",
+      "optimizer_trial_id": null,
+      "response_quality_score": null,
+      "schema_fidelity_score": null,
+      "runtime_efficiency_score": null,
+      "stability_score": null
+    }
+    \end{lstlisting}
+    
+    The schema separates model behavior, runtime behavior, and evaluation state. That separation is intentional because a fast run can still be malformed, and a valid JSON response can still be semantically weak.
+    
+    \subsection{ASCII trace output}
+    Each run also emits an ASCII trace optimized for immediate inspection:
+    \begin{lstlisting}[style=tracerank,caption={Illustrative ASCII trace.}]
+    [14:37:12.456] TRACE 8f3a RUN model=gpt-oss-20b ctx=16384 temp=0.15
+    [14:37:12.489] SEND prompt_tokens=245
+    [14:37:12.612] RECV seq=1 delta="{"
+    [14:37:13.021] DONE reason=stop total_ms=612
+    \end{lstlisting}
+    
+    \section{Structured outputs and schema fidelity}
+    Ollama documents two relevant structured-response modes: JSON mode and JSON-Schema-based structured outputs \cite{ollama_structured}. TraceRank therefore distinguishes between:
+    \begin{itemize}
+      \item \textbf{Response quality}, which evaluates semantic usefulness, and
+      \item \textbf{Schema fidelity}, which evaluates conformance to required structure.
+    \end{itemize}
+    
+    A minimal composite quality function is
+    \begin{equation}
+    Q(r)=w_1 q_{\text{sem}}(r)+w_2 q_{\text{schema}}(r)+w_3 q_{\text{perf}}(r)+w_4 q_{\text{stab}}(r),
+    \end{equation}
+    where the four terms denote semantic quality, schema fidelity, runtime performance, and stability respectively.
+    
+    \section{Optimization objective}
+    Ollama documents runtime controls such as \texttt{OLLAMA\_NUM\_PARALLEL} and notes that required RAM scales with parallelism and context length \cite{ollama_faq}. Therefore concurrency is a memory-performance tradeoff, not a universal improvement. TraceRank models runtime knobs as benchmark variables, not constants.
+    
+    The optimization objective is modeled as
+    \begin{equation}
+    J(\theta)=\lambda_1 Q(\theta)-\lambda_2 L(\theta)-\lambda_3 M(\theta)-\lambda_4 V(\theta),
+    \end{equation}
+    where $Q$ denotes quality, $L$ latency, $M$ memory pressure, and $V$ instability. Optuna supports multi-objective optimization and is appropriate for searching this space under developer-chosen constraints \cite{optuna_multi}.
+    
+    \begin{algorithm}[H]
+    \caption{Offline optimization loop}
+    \begin{algorithmic}[1]
+    \Require Prompt set $\mathcal{P}$, configuration space $\Theta$, budget $B$
+    \State Initialize study $\mathcal{S}$
+    \For{$b=1$ to $B$}
+      \State Sample configuration $\theta_b \sim \Theta$
+      \State Execute benchmark suite on $\mathcal{P}$ under $\theta_b$
+      \State Collect JSONL traces and summary metrics
+      \State Compute $Q(\theta_b), L(\theta_b), M(\theta_b), V(\theta_b)$
+      \State Report objective(s) to $\mathcal{S}$
+    \EndFor
+    \State Return Pareto-optimal or best-scoring candidates
+    \end{algorithmic}
+    \end{algorithm}
+    
+    \section{Adapter and LoRA workflow}
+    Ollama documents \texttt{ADAPTER} in Modelfiles as the mechanism for applying a fine-tuned LoRA adapter to a base model, and its model-import documentation includes importing a Safetensors adapter with a matching base model \cite{ollama_modelfile,ollama_import}. TraceRank uses that documented capability as the serving-side attachment point for validated adapters.
+    
+    However, the training and export pipeline must be treated conservatively. The \texttt{mlx-tune} project documents that GGUF export does not work directly from quantized 4-bit base models due to an \texttt{mlx-lm} limitation \cite{mlxtune_readme}. Therefore TraceRank defines four adapter states:
+    \begin{enumerate}[label=\arabic*.]
+      \item \textbf{Candidate}
+      \item \textbf{Validated}
+      \item \textbf{Shadow-tested}
+      \item \textbf{Promoted}
+    \end{enumerate}
+    Only promoted adapters are attached to production-facing Modelfiles.
+    
+    \subsection{Promotion policy}
+    An adapter candidate should be promoted only if all of the following are satisfied:
+    \begin{enumerate}[label=\alph*.]
+      \item It outperforms the baseline on the published evaluation set.
+      \item It does not regress schema fidelity beyond the configured threshold.
+      \item It does not materially worsen latency or memory pressure beyond allowed bounds.
+      \item It passes a rollback-safe shadow test.
+    \end{enumerate}
+    
+    \section{End-to-end build protocol}
+    This section describes the end-to-end protocol for implementing TraceRank as internal tooling.
+    
+    \subsection{Build goals}
+    The implementation target is a sidecar system that:
+    \begin{itemize}
+      \item keeps Ollama as the sole inference engine,
+      \item captures every observable event from a \texttt{gpt-oss-20b} run,
+      \item writes synchronized ASCII and JSONL traces,
+      \item computes run summaries and structural diagnostics,
+      \item supports reproducible optimization studies,
+      \item supports adapter evaluation and promotion,
+      \item remains local-first and rollback-safe.
+    \end{itemize}
+    
+    \subsection{Reference software stack}
+    \begin{longtable}{p{3cm}p{4cm}p{7.5cm}}
+    \toprule
+    \textbf{Layer} & \textbf{Component} & \textbf{Role} \\
+    \midrule
+    Inference & Ollama & Hosts \texttt{gpt-oss-20b}; exposes streaming and structured-output surfaces. \\
+    Proxy (optional) & LiteLLM & Provides OpenAI-style normalization and proxy capabilities for Ollama-backed traffic. \\
+    Collector & TraceRank SDK & Intercepts request metadata and response streams; emits synchronized traces. \\
+    Trace sink & JSONL / Langfuse & Stores normalized events and aggregate spans. \\
+    Optimization & Optuna & Runs offline or scheduled multi-objective studies. \\
+    Adapter training & External training stack & Produces candidate adapters subject to export-format constraints. \\
+    Serving attach point & Ollama \texttt{ADAPTER} & Binds promoted adapters to a matching base model. \\
+    \bottomrule
+    \end{longtable}
+    
+    \subsection{Step-by-step implementation}
+    \paragraph{Step 1: Provision Ollama and the base model.}
+    Install Ollama and confirm that \texttt{gpt-oss-20b} can be served locally according to OpenAI's Ollama guide \cite{openai_ollama_guide}. Keep the base model unmodified.
+    
+    \paragraph{Step 2: Establish a single request path.}
+    Choose one ingress path for all traffic: direct Ollama API or LiteLLM fronting Ollama. The critical requirement is that every production request traverse the same observable surface so that traces are complete and comparable \cite{litellm_ollama}.
+    
+    \paragraph{Step 3: Implement event capture.}
+    Capture request metadata before dispatch, then subscribe to streaming response events. Normalize every event into the versioned TraceRank schema. Persist events as newline-delimited JSON with strictly increasing sequence numbers per run.
+    
+    \paragraph{Step 4: Emit ASCII in lockstep.}
+    For every normalized JSON event, emit a corresponding compact ASCII line. The two representations must share the same run identifier and sequence ordering.
+    
+    \paragraph{Step 5: Compute per-run summaries.}
+    At run end, compute a \texttt{summary.json} containing aggregate timings, token counts if available, schema fidelity, concentration, graph-collapse measures, and the composite structural score.
+    
+    \paragraph{Step 6: Benchmark before tuning.}
+    Run a baseline benchmark suite on a fixed prompt set. Record warm-cache and cold-cache results separately. No optimization should occur before a baseline is frozen.
+    
+    \paragraph{Step 7: Launch Optuna studies offline.}
+    Treat context length, concurrency, temperature, stop conditions, output limits, and prompt variants as variables. Search over them under explicit resource constraints. Persist every trial as a first-class TraceRank run.
+    
+    \paragraph{Step 8: Evaluate adapters out of band.}
+    Candidate adapters must be trained and validated outside the online serving path. Only after validation and shadow testing should a promoted adapter be attached to a production Modelfile using Ollama's documented \texttt{ADAPTER} mechanism \cite{ollama_modelfile,ollama_import}.
+    
+    \paragraph{Step 9: Keep rollback immediate.}
+    Every deployment unit must support an immediate fallback to the previous baseline configuration and adapter state. Rollback metadata should be part of the deployment manifest.
+    
+    \section{Benchmark methodology}
+    Every benchmark result must record:
+    \begin{itemize}
+      \item hardware profile,
+      \item model version,
+      \item adapter state,
+      \item context length,
+      \item concurrency settings,
+      \item prompt set,
+      \item warm/cold cache status,
+      \item number of runs,
+      \item median and percentile latencies,
+      \item schema fidelity,
+      \item structural score,
+      \item task-specific quality metrics.
+    \end{itemize}
+    
+    \subsection{Recommended benchmark table template}
+    \begin{table}[H]
+    \centering
+    \begin{tabularx}{\textwidth}{l l c c c c X}
+    \toprule
+    Config ID & Adapter & p50 ms & p95 ms & Schema & $S$ & Notes \\
+    \midrule
+    baseline-a & none & --- & --- & --- & --- & Fill after measurement \\
+    trial-b & none & --- & --- & --- & --- & Fill after measurement \\
+    promoted-c & coder-v1 & --- & --- & --- & --- & Fill after measurement \\
+    \bottomrule
+    \end{tabularx}
+    \caption{Reproducible benchmark reporting template.}
+    \end{table}
+    
+    \section{Compatibility matrix}
+    \begin{longtable}{p{4cm}p{3cm}p{7.2cm}}
+    \toprule
+    \textbf{Capability} & \textbf{Status} & \textbf{Notes} \\
+    \midrule
+    \endfirsthead
+    \toprule
+    \textbf{Capability} & \textbf{Status} & \textbf{Notes} \\
+    \midrule
+    \endhead
+    Ollama streaming API & Documented & TraceRank relies on streamed response handling. \\
+    Harmony handling under Ollama & Documented & OpenAI states provider stack handles formatting when using Ollama. \\
+    Structured outputs & Documented & Ollama documents JSON mode and JSON-schema outputs. \\
+    Modelfile \texttt{ADAPTER} & Documented & Supported by Ollama for matching base models. \\
+    Safetensors adapter import & Documented & Ollama documents importing Safetensors adapters. \\
+    LiteLLM as front proxy & Documented & LiteLLM documents Ollama provider support. \\
+    Langfuse as trace sink & Documented & Langfuse documents Ollama tracing integration. \\
+    Optuna multi-objective studies & Documented & Suitable for offline TraceRank optimization. \\
+    GGUF export from quantized 4-bit training base & Limited & \texttt{mlx-tune} documents this as a current limitation. \\
+    Internal activation tracing via standard Ollama API & Not available & TraceRank uses observable surrogates instead. \\
+    \bottomrule
+    \end{longtable}
+    
+    \section{Privacy, local control, and operational safety}
+    TraceRank is designed for local-first deployment. The trace system should support prompt hashing, selective redaction, and local-only sinks. Langfuse documents local/self-hosted deployment patterns, and LiteLLM can operate as a local proxy, making a fully local setup feasible when configured accordingly \cite{langfuse_ollama,litellm_ollama}.
+    
+    TraceRank is not a substitute for policy enforcement, moderation, or content safety systems. It is an observability and optimization layer.
+    
+    \section{Limitations}
+    TraceRank has explicit limits.
+    \begin{itemize}
+      \item It does not expose hidden activations through Ollama's standard API.
+      \item It does not prove semantic correctness from structure alone.
+      \item It does not guarantee that every adapter-training pipeline is portable to every serving format.
+      \item It does not treat concurrency as a free win; Ollama documents that memory scales with concurrency and context length \cite{ollama_faq}.
+      \item It assumes Harmony semantics are preserved by the serving stack when using Ollama, consistent with OpenAI's documentation \cite{openai_harmony,openai_ollama_guide}.
+    \end{itemize}
+    
+    \section{Research contributions}
+    TraceRank v3 contributes:
+    \begin{enumerate}[label=\arabic*.]
+      \item a \texttt{gpt-oss-20b}-specific observability design,
+      \item a Harmony-aware runtime interpretation,
+      \item a dual-output trace format for humans and machines,
+      \item a structural diagnostic score over local inference behavior,
+      \item a benchmark discipline separating documented capability from empirical result,
+      \item a gated adapter-promotion framework aligned with Ollama's documented \texttt{ADAPTER} path and current export constraints.
+    \end{enumerate}
+    
+    \section{Conclusion}
+    TraceRank v3 defines a deliberately narrow and therefore stronger thesis:
+    \begin{equation}
+    \boxed{\text{TraceRank is a Harmony-aware observability and optimization layer for \texttt{gpt-oss-20b} on Ollama.}}
+    \end{equation}
+    
+    It does not replace Ollama. It does not claim hidden-state introspection. It does not overstate adapter portability. Instead, it turns documented local inference surfaces into a measurable runtime system: one that can be traced, serialized, benchmarked, tuned, and improved with discipline. That makes it a practical research and engineering framework for developers who want to operate \texttt{gpt-oss-20b} as a system rather than merely prompt it as a tool.
+    
+    \appendix
+    \section{Minimal deployment manifest template}
+    \begin{lstlisting}[style=tracerank,caption={Illustrative deployment manifest.}]
+    {
+      "deployment_id": "tracerank-prod-001",
+      "base_model": "gpt-oss-20b",
+      "ollama_endpoint": "http://localhost:11434",
+      "ingress_mode": "litellm-proxy",
+      "trace_schema_version": "3.0.0",
+      "active_adapter": null,
+      "rollback_target": "baseline-2026-03-21",
+      "benchmark_suite": "internal-core-v1",
+      "privacy_mode": "local-redacted"
+    }
+    \end{lstlisting}
+    
+    \section{Suggested repository layout}
+    \begin{lstlisting}[style=tracerank]
+    tracerank/
+      pyproject.toml
+      tracerank/
+        collector.py
+        ascii_renderer.py
+        serializer.py
+        analytics.py
+        optimizer.py
+        adapters.py
+        cli.py
+      configs/
+        baseline.yaml
+        studies.yaml
+      prompts/
+        benchmark_core.jsonl
+      runs/
+        YYYY-MM-DD/
+          trace.txt
+          events.jsonl
+          summary.json
+      docs/
+        whitepaper/
+          tracerank_v3.tex
+    \end{lstlisting}
+    
+    \section{Build and review checklist}
+    \begin{enumerate}[label=\arabic*.]
+      \item Confirm baseline \texttt{gpt-oss-20b} runs through Ollama.
+      \item Confirm every request passes through a single observable ingress path.
+      \item Confirm JSONL and ASCII outputs are sequence-consistent.
+      \item Freeze a baseline benchmark before any optimization.
+      \item Record warm/cold cache state for all benchmarks.
+      \item Label every claim as documented, implemented, benchmarked, or experimental.
+      \item Gate adapter promotion with shadow testing and instant rollback.
+    \end{enumerate}
+    
+    \printbibliography
+    \end{document}
+    

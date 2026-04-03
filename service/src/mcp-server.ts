@@ -3,6 +3,7 @@ import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
 import { z } from 'zod';
 import type { ServiceConfig } from './config.js';
 import { routeInference, listModels } from './router.js';
+import { connectRepo } from './repo-connect.js';
 import type { Request, Response } from 'express';
 
 const MERMATE_URL = (process.env.MERMATE_URL || 'http://127.0.0.1:3333').replace(/\/+$/, '');
@@ -350,68 +351,50 @@ export function createMcpServer(config: ServiceConfig): McpServer {
     repo_path: z.string().min(1).describe('Absolute path to the repo'),
   }, async ({ repo_path }) => {
     try {
-      const fsp = (await import('node:fs')).promises;
-      const pathMod = await import('node:path');
-
-      const safeRoot = process.env.HOME || '/tmp';
-      const resolved = pathMod.resolve(repo_path);
-      if (!resolved.startsWith(safeRoot)) {
-        return errorResult('Path must be under home directory', new Error(`path traversal blocked: ${resolved}`));
-      }
-      try {
-        const stat = await fsp.lstat(resolved);
-        if (stat.isSymbolicLink()) {
-          return errorResult('Symlinks not allowed for repo root', new Error('symlink detected'));
-        }
-        if (!stat.isDirectory()) {
-          return errorResult('Path is not a directory', new Error(`not a directory: ${resolved}`));
-        }
-      } catch (statErr) {
-        return errorResult('Path not accessible', statErr);
-      }
-
-      const checks: Array<{ item: string; status: string; action?: string }> = [];
-      const exists = async (f: string) => fsp.access(pathMod.join(resolved, f)).then(() => true, () => false);
-
-      const [hasPkg, hasCargo, hasReadme, hasRun] = await Promise.all([
-        exists('package.json'), exists('Cargo.toml'), exists('README.md'), exists('run.sh'),
-      ]);
-      checks.push({ item: 'project_file', status: hasPkg || hasCargo ? 'found' : 'missing' });
-      checks.push({ item: 'README.md', status: hasReadme ? 'found' : 'missing' });
-      checks.push({ item: 'run.sh', status: hasRun ? 'found' : 'missing' });
-
-      const envPath = pathMod.join(resolved, '.env');
-      if (!(await exists('.env'))) {
-        await fsp.writeFile(envPath, `# Opseeq connection\nOPENAI_BASE_URL=http://localhost:9090/v1\nOPSEEQ_URL=http://localhost:9090\n`);
-        checks.push({ item: '.env', status: 'created', action: 'Generated with Opseeq connection vars' });
-      } else {
-        const content = await fsp.readFile(envPath, 'utf8');
-        if (!content.includes('OPSEEQ_URL')) {
-          await fsp.appendFile(envPath, `\n# Opseeq connection\nOPSEEQ_URL=http://localhost:9090\n`);
-          checks.push({ item: '.env', status: 'updated', action: 'Appended OPSEEQ_URL' });
-        } else {
-          checks.push({ item: '.env', status: 'found' });
-        }
-      }
-
-      const mcpPath = pathMod.join(resolved, '.mcp.json');
-      if (!(await exists('.mcp.json'))) {
-        await fsp.writeFile(mcpPath, JSON.stringify({ mcpServers: { opseeq: { url: 'http://localhost:9090/mcp' } } }, null, 2) + '\n');
-        checks.push({ item: '.mcp.json', status: 'created', action: 'Generated for Opseeq MCP' });
-      } else {
-        checks.push({ item: '.mcp.json', status: 'found' });
-      }
-
-      if (hasCargo) {
-        const hasBin = await exists('target/release');
-        checks.push({ item: 'rust_binary', status: hasBin ? 'found' : 'not_built' });
-      }
-
-      return jsonResult({ repo_path: resolved, checks });
+      const result = await connectRepo(repo_path, { env: process.env });
+      return jsonResult({ repo_path: result.repoPath, analysis: result.analysis, checks: result.checks, warnings: result.warnings });
     } catch (e) { return errorResult('Repo organize failed', e); }
   });
 
-  // ── 23. artifact_verify ──────────────────────────────────────
+  // ── 23. godmode_status ───────────────────────────────────────
+  server.tool('godmode_status', 'Inspect the God-mode OODA pipeline defaults, extension registry, and Living Architecture Graph summary', {}, async () => {
+    try {
+      return jsonResult(await requestJson(`${OPSEEQ_URL}/api/ooda/extensions`));
+    } catch (e) { return errorResult('God-mode status failed', e); }
+  });
+
+  // ── 24. godmode_plan ─────────────────────────────────────────
+  server.tool('godmode_plan', 'Run the Mermate -> Lucidity -> approval -> TLA+/TS/Rust God-mode planner without leaving the Opseeq control plane', {
+    intent: z.string().min(1).describe('Human idea or markdown input'),
+    repoPath: z.string().optional().describe('Absolute repo path'),
+    appId: z.string().optional().describe('Target app id'),
+    inputMode: z.enum(['idea', 'markdown', 'mmd']).optional(),
+    maxMode: z.boolean().optional(),
+    approved: z.boolean().optional(),
+    execute: z.boolean().optional(),
+    includeTla: z.boolean().optional(),
+    includeTs: z.boolean().optional(),
+    includeRust: z.boolean().optional(),
+    localModel: z.string().optional(),
+    allowRemoteAugmentation: z.boolean().optional(),
+    allowModelCritique: z.boolean().optional(),
+  }, async (input) => {
+    try {
+      return jsonResult(await requestJson(`${OPSEEQ_URL}/api/ooda/godmode`, {
+        method: 'POST',
+        body: JSON.stringify(input),
+      }));
+    } catch (e) { return errorResult('God-mode planning failed', e); }
+  });
+
+  // ── 25. living_architecture_graph ────────────────────────────
+  server.tool('living_architecture_graph', 'Inspect the latest Living Architecture Graph and immutable artifact ledger summary', {}, async () => {
+    try {
+      return jsonResult(await requestJson(`${OPSEEQ_URL}/api/ooda/graph`));
+    } catch (e) { return errorResult('Living Architecture Graph unavailable', e); }
+  });
+
+  // ── 26. artifact_verify ──────────────────────────────────────
   server.tool('artifact_verify', 'Verify pipeline artifacts for a Mermate run at a specific stage', {
     run_id: z.string().min(1).describe('Mermate run ID'),
     stage: z.enum(['render', 'tla', 'ts', 'rust']).describe('Pipeline stage to verify'),
@@ -429,7 +412,7 @@ export function createMcpServer(config: ServiceConfig): McpServer {
     } catch (e) { return errorResult(`Artifact verification failed for ${stage}`, e); }
   });
 
-  // ── 25. browser_navigate ─────────────────────────────────────
+  // ── 27. browser_navigate ─────────────────────────────────────
   server.tool('browser_navigate', 'Navigate the Opseeq-controlled browser to a URL (Mermate :3333, Synth :8420, or any URL). Returns page title and element state.', {
     url: z.string().min(1).describe('URL to navigate to (e.g. http://localhost:3333, http://localhost:8420)'),
     screenshot: z.boolean().optional().describe('Take a screenshot after navigation'),
@@ -451,7 +434,7 @@ export function createMcpServer(config: ServiceConfig): McpServer {
     } catch (e) { return errorResult(`Browser navigate failed for ${url}`, e); }
   });
 
-  // ── 26. browser_interact ────────────────────────────────────
+  // ── 28. browser_interact ────────────────────────────────────
   server.tool('browser_interact', 'Interact with elements in the Opseeq-controlled browser: click, type, scroll. Use browser_navigate first.', {
     action: z.enum(['click', 'type', 'scroll_down', 'scroll_up', 'screenshot', 'state']).describe('Action to perform'),
     element_index: z.number().optional().describe('Element index from browser state (for click/type)'),
@@ -476,7 +459,7 @@ export function createMcpServer(config: ServiceConfig): McpServer {
     } catch (e) { return errorResult(`Browser interaction failed: ${action}`, e); }
   });
 
-  // ── 27. health_check ─────────────────────────────────────────
+  // ── 29. health_check ─────────────────────────────────────────
   server.tool('health_check', 'Check health of all configured providers', {}, async () => {
     const providerStatus = await Promise.all(config.providers.map(async (p) => {
       const ctrl = new AbortController();

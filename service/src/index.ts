@@ -2,11 +2,19 @@ import express from 'express';
 import cors from 'cors';
 import crypto from 'node:crypto';
 import http from 'node:http';
+import path from 'node:path';
 import { loadConfig, type ServiceConfig } from './config.js';
 import { routeInference, routeInferenceStream, listModels, setKernel } from './router.js';
 import { getFeedbackSnapshot, getRecentArtifacts, TAU } from './feedback.js';
 import { createMcpServer, handleMcpSse, handleMcpMessages } from './mcp-server.js';
 import { KernelClient } from './kernel.js';
+import { openAppSurface, AppLauncherError } from './app-launcher.js';
+import { connectRepo, RepoConnectError } from './repo-connect.js';
+import { getNemoClawOverview, NemoClawControlError, runNemoClawAction, setNemoClawDefaultSandbox } from './nemoclaw-control.js';
+import { getExtensionRegistry, getGodModeRoutingDefaults } from './extension-registry.js';
+import { getLivingArchitectureGraph } from './living-architecture-graph.js';
+import { orchestrateGodModePipeline } from './mermate-lucidity-ooda.js';
+import { listImmutableArtifacts } from './trace-sink.js';
 import type { ChatCompletionRequest } from './router.js';
 
 const config = loadConfig();
@@ -74,6 +82,8 @@ const MERMATE_URL = (process.env.MERMATE_URL || 'http://127.0.0.1:3333').replace
 const SYNTH_URL = (process.env.SYNTHESIS_TRADE_URL || 'http://127.0.0.1:8420').replace(/\/+$/, '');
 const OLLAMA_URL = (process.env.OLLAMA_URL || process.env.LOCAL_LLM_BASE_URL || '').replace(/\/+$/, '');
 const DEFAULT_OLLAMA_MODEL = process.env.OLLAMA_MODEL || process.env.LOCAL_LLM_MODEL || 'gpt-oss:20b';
+const GODMODE_PROMPT_PATH = path.resolve(process.cwd(), '..', 'config', 'nemoclaw-godmode.system-prompt.md');
+const GODMODE_POLICY_PATH = path.resolve(process.cwd(), '..', 'config', 'nemoclaw-godmode-policy.yaml');
 
 // ── Graceful shutdown state ──────────────────────────────────────
 let isShuttingDown = false;
@@ -457,7 +467,11 @@ if (config.mcpEnabled) {
 
 app.get('/api/status', authenticate, async (_req, res) => {
   const allModels = await getCachedModels();
-  const [mermate, ollama] = await Promise.all([getCachedMermateState(), getCachedOllamaState()]);
+  const [mermate, ollama, nemoclaw] = await Promise.all([getCachedMermateState(), getCachedOllamaState(), getNemoClawOverview(process.env)]);
+  const livingArchitectureGraph = getLivingArchitectureGraph();
+  const godModeDefaults = getGodModeRoutingDefaults('all');
+  const extensionRegistry = getExtensionRegistry();
+  const recentGodArtifacts = listImmutableArtifacts(undefined, 5);
   res.json({
     meta: { generatedAt: new Date().toISOString(), serverStartedAt, uptimeSeconds: process.uptime(), version: VERSION },
     controls: {
@@ -469,10 +483,42 @@ app.get('/api/status', authenticate, async (_req, res) => {
       },
     },
     sandbox: { available: true, mode: 'opseeq-gateway', name: 'opseeq' },
+    nemoclaw: {
+      available: nemoclaw.cliAvailable || nemoclaw.gateway.available || nemoclaw.stats.total > 0,
+      defaultSandbox: nemoclaw.defaultSandbox,
+      sandboxes: nemoclaw.stats.total,
+      reachableSandboxes: nemoclaw.stats.reachable,
+      gateway: {
+        state: nemoclaw.gateway.state,
+        summary: nemoclaw.gateway.summary,
+        activeGateway: nemoclaw.gateway.activeGateway,
+      },
+    },
     inference: {
       available: config.providers.length > 0,
       models: allModels.map(m => m.id), defaultModel: config.defaultModel,
       providerCount: config.providers.length,
+    },
+    godMode: {
+      plannerModel: godModeDefaults.plannerModel,
+      executionModel: godModeDefaults.executionModel,
+      extensionPacks: extensionRegistry.map((pack) => ({ id: pack.id, label: pack.label, targets: pack.targets })),
+      assets: {
+        prompt: GODMODE_PROMPT_PATH,
+        policy: GODMODE_POLICY_PATH,
+      },
+      livingArchitectureGraph: {
+        versions: livingArchitectureGraph.versions.length,
+        nodes: livingArchitectureGraph.nodes.length,
+        edges: livingArchitectureGraph.edges.length,
+      },
+      immutableArtifacts: recentGodArtifacts.map((artifact) => ({
+        id: artifact.id,
+        kind: artifact.kind,
+        taskId: artifact.taskId,
+        createdAt: artifact.createdAt,
+      })),
+      canonicalPath: 'idea -> performance assessment -> Mermate MAX -> Lucidity polish -> approval -> TLA+ -> TypeScript -> Rust -> macOS app',
     },
     providers: config.providers.map(p => ({ name: p.name, type: p.name.includes('nim') ? 'nvidia' : 'openai-compat' })),
     ollama, mermate: { id: 'mermate', label: 'Mermate architecture copilot', role: 'diagram_tla_ts_pipeline', baseUrl: MERMATE_URL, ...mermate },
@@ -483,7 +529,7 @@ app.get('/api/status', authenticate, async (_req, res) => {
     },
     mcp: { enabled: config.mcpEnabled, endpoint: '/mcp', transport: 'sse' },
     selfImprovement: getFeedbackSnapshot(),
-    transport: { primary: 'multi-provider (NIM > OpenAI > Anthropic > Ollama) + adaptive feedback', mode: 'opseeq-gateway' },
+    transport: { primary: 'local-first (Ollama gpt-oss:20b -> NIM/OpenAI -> Anthropic by approval) + adaptive feedback', mode: 'opseeq-gateway' },
   });
 });
 
@@ -566,6 +612,152 @@ app.post('/api/connectivity/probe', authenticate, async (req, res) => {
   } finally { clearTimeout(timer); }
 });
 
+app.post('/api/repos/connect', authenticate, async (req, res) => {
+  const repoPath = req.body?.repoPath || req.body?.repo_path;
+  if (!repoPath || typeof repoPath !== 'string') {
+    res.status(400).json({ error: 'repoPath is required' });
+    return;
+  }
+  try {
+    const result = await connectRepo(repoPath, { env: process.env });
+    res.json(result);
+  } catch (err) {
+    if (err instanceof RepoConnectError) {
+      res.status(err.statusCode).json({ error: err.message });
+      return;
+    }
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+app.post('/api/apps/open', authenticate, async (req, res) => {
+  const appId = req.body?.appId || req.body?.id;
+  if (!appId || typeof appId !== 'string') {
+    res.status(400).json({ error: 'appId is required' });
+    return;
+  }
+  try {
+    const result = await openAppSurface(appId, process.env);
+    res.json(result);
+  } catch (err) {
+    if (err instanceof AppLauncherError) {
+      res.status(err.statusCode).json({ error: err.message });
+      return;
+    }
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+app.get('/api/nemoclaw/status', authenticate, async (_req, res) => {
+  try {
+    const overview = await getNemoClawOverview(process.env);
+    res.json(overview);
+  } catch (err) {
+    if (err instanceof NemoClawControlError) {
+      res.status(err.statusCode).json({ error: err.message });
+      return;
+    }
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+app.post('/api/nemoclaw/actions', authenticate, async (req, res) => {
+  const action = req.body?.action;
+  const sandboxName = req.body?.sandboxName || req.body?.name;
+  if (!sandboxName || typeof sandboxName !== 'string') {
+    res.status(400).json({ error: 'sandboxName is required' });
+    return;
+  }
+  if (action !== 'connect' && action !== 'status' && action !== 'logs') {
+    res.status(400).json({ error: 'action must be one of connect, status, or logs' });
+    return;
+  }
+  try {
+    const result = await runNemoClawAction(action, sandboxName, process.env);
+    res.json(result);
+  } catch (err) {
+    if (err instanceof NemoClawControlError) {
+      res.status(err.statusCode).json({ error: err.message });
+      return;
+    }
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+app.post('/api/nemoclaw/default', authenticate, async (req, res) => {
+  const sandboxName = req.body?.sandboxName || req.body?.name;
+  if (!sandboxName || typeof sandboxName !== 'string') {
+    res.status(400).json({ error: 'sandboxName is required' });
+    return;
+  }
+  try {
+    const result = setNemoClawDefaultSandbox(sandboxName);
+    res.json(result);
+  } catch (err) {
+    if (err instanceof NemoClawControlError) {
+      res.status(err.statusCode).json({ error: err.message });
+      return;
+    }
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+app.get('/api/ooda/extensions', authenticate, (_req, res) => {
+  const defaults = getGodModeRoutingDefaults('all');
+  res.json({
+    defaults,
+    assets: {
+      prompt: GODMODE_PROMPT_PATH,
+      policy: GODMODE_POLICY_PATH,
+    },
+    extensions: getExtensionRegistry(),
+  });
+});
+
+app.get('/api/ooda/graph', authenticate, (_req, res) => {
+  const graph = getLivingArchitectureGraph();
+  res.json({
+    generatedAt: new Date().toISOString(),
+    graph,
+    recentArtifacts: listImmutableArtifacts(undefined, 10).map((artifact) => ({
+      id: artifact.id,
+      taskId: artifact.taskId,
+      kind: artifact.kind,
+      createdAt: artifact.createdAt,
+      hash: artifact.hash,
+      path: artifact.path,
+    })),
+  });
+});
+
+app.post('/api/ooda/godmode', authenticate, async (req, res) => {
+  const intent = req.body?.intent;
+  if (!intent || typeof intent !== 'string') {
+    res.status(400).json({ error: 'intent is required' });
+    return;
+  }
+  try {
+    const result = await orchestrateGodModePipeline({
+      intent,
+      repoPath: typeof req.body?.repoPath === 'string' ? req.body.repoPath : undefined,
+      appId: typeof req.body?.appId === 'string' ? req.body.appId : undefined,
+      inputMode: req.body?.inputMode,
+      maxMode: req.body?.maxMode,
+      approved: req.body?.approved,
+      execute: req.body?.execute,
+      includeTla: req.body?.includeTla,
+      includeTs: req.body?.includeTs,
+      includeRust: req.body?.includeRust,
+      localModel: typeof req.body?.localModel === 'string' ? req.body.localModel : undefined,
+      allowRemoteAugmentation: req.body?.allowRemoteAugmentation,
+      allowModelCritique: req.body?.allowModelCritique,
+    }, config);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
 app.get('/api/architect/status', authenticate, async (_req, res) => {
   const mermate = await getCachedMermateState();
   res.json({ architect: { available: mermate.running, mode: 'opseeq-gateway' }, mermate: { baseUrl: MERMATE_URL, ...mermate } });
@@ -629,6 +821,9 @@ app.get('/', (_req, res) => {
       embeddings: '/v1/embeddings', integrations: '/api/integrations',
       connectivity: '/api/connectivity', architect: '/api/architect/status',
       pipeline: '/api/architect/pipeline', scaffold: '/api/builder/scaffold',
+      repo_connect: '/api/repos/connect', app_open: '/api/apps/open',
+      nemoclaw_status: '/api/nemoclaw/status', nemoclaw_action: '/api/nemoclaw/actions', nemoclaw_default: '/api/nemoclaw/default',
+      ooda_extensions: '/api/ooda/extensions', ooda_graph: '/api/ooda/graph', ooda_godmode: '/api/ooda/godmode',
       mcp: config.mcpEnabled ? '/mcp' : 'disabled',
       mermate_render: '/api/render', mermate_tla: '/api/render/tla', mermate_ts: '/api/render/ts',
     },

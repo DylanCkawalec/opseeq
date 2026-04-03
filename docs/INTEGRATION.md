@@ -28,6 +28,8 @@ Any application that can make HTTP requests can use Opseeq as its inference back
 | `/api/artifacts` | GET | Recent inference artifacts (CELLAR hot-plane) |
 | `/api/connectivity` | GET | Probe all configured providers + integrations |
 | `/api/integrations` | GET | Status of connected apps (Mermate, Synth, Ollama) |
+| `/api/repos/connect` | POST | Analyze a local repo path, merge `.env` and `.mcp.json`, and return onboarding metadata |
+| `/api/apps/open` | POST | Ask Opseeq to open a managed app surface such as Mermate or Synth |
 | `/mcp` | GET (SSE) | MCP server endpoint (Model Context Protocol) |
 | `/mcp/messages` | POST | MCP message handler |
 
@@ -90,7 +92,24 @@ If unset (development mode), all requests are open.
 
 ## 4. Connecting a New App
 
-### Step 1: Set Environment Variables
+### Step 1: Auto-connect a Local Repo
+
+From the dashboard, paste an absolute local repo path into `Connect a New App`. Opseeq will:
+
+- inspect the repo type and likely runtime
+- merge the Opseeq connection keys into `.env`
+- merge or create `.mcp.json`
+- report whether the repo is only `Opseeq-connected`, `launchable`, or `desktop-ready`
+
+You can also call the backend directly:
+
+```bash
+curl -X POST http://localhost:9090/api/repos/connect \
+  -H "Content-Type: application/json" \
+  -d '{"repoPath":"/Users/you/Desktop/developer/my-app"}'
+```
+
+### Step 2: Set Environment Variables
 
 In your app's `.env`:
 ```bash
@@ -102,7 +121,7 @@ OPENAI_API_KEY=your-opseeq-key
 OPSEEQ_URL=http://localhost:9090
 ```
 
-### Step 2: MCP Integration (optional)
+### Step 3: MCP Integration (optional)
 
 Create `.mcp.json` in your project root:
 ```json
@@ -117,7 +136,7 @@ Create `.mcp.json` in your project root:
 
 This exposes 24 MCP tools including inference, model listing, architecture pipelines, desktop scanning, and more.
 
-### Step 3: Use Any OpenAI-Compatible SDK
+### Step 4: Use Any OpenAI-Compatible SDK
 
 ```python
 from openai import OpenAI

@@ -1,0 +1,657 @@
+\documentclass[11pt,a4paper,oneside]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amsthm,amssymb,amsfonts}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{hyperref}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{graphicx}
+\usepackage{tikz}
+\usepackage{natbib}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{float}
+\usepackage{enumitem}
+\usepackage{url}
+\usepackage{siunitx}
+\usepackage{array}
+\usepackage{longtable}
+\usepackage{tabularx}
+\usepackage{microtype}
+\usepackage{caption}
+\usepackage{pdflscape}
+\usetikzlibrary{arrows.meta, positioning, shapes, shadows}
+
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue,
+    citecolor=blue,
+    urlcolor=blue,
+    pdftitle={A Bounded Graph-of-Thoughts Pipeline for Research-to-Rust Agent Creation under Local Mixture-of-Experts Inference},
+    pdfauthor={Dylan Kawalec}
+}
+
+\lstset{
+  basicstyle=\ttfamily\small,
+  breaklines=true,
+  frame=single,
+  columns=fullflexible,
+  keepspaces=true,
+  keywordstyle=\color{blue},
+  commentstyle=\color{gray},
+  showstringspaces=false
+}
+
+\title{A Bounded Graph-of-Thoughts Pipeline for Research-to-Rust Agent Creation under Local Mixture-of-Experts Inference}
+\author{Dylan Kawalec \\
+        \texttt{ChaoticBeautys} \\
+        Canc\'un, Quintana Roo, MX}
+\date{March 2026}
+
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{axiom}{Axiom}[section]
+\newtheorem{definition}{Definition}[section]
+\newtheorem{proposition}{Proposition}[section]
+\newtheorem{corollary}{Corollary}[section]
+\newtheorem{remark}{Remark}[section]
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+We present GoT-AgentForge, a bounded Graph-of-Thoughts pipeline for transforming a natural-language project specification into a formally checked intermediate specification and a compilable Rust crate under local or hybrid Mixture-of-Experts deployment assumptions. The framework inherits its controller core from HPC-GoT: a typed state-transition controller with fixed depth cap, bounded branching, global controller-state budget, deterministic router-side validator scoring, threshold pruning, and a single optional merge. GoT-AgentForge extends that controller with a pluggable extension registry, ORACLE-based provenance and orchestration, Prompt Master workflow guidance for the research phase, and artifact transitions spanning Mermaid, TLA+, TSX, and Rust. We formalize the system model, stage contracts, validator interfaces, provenance semantics, failure semantics, and deployment profiles. We explicitly separate inherited controller-level guarantees from newly introduced mechanisms that remain assumptions or future proof obligations, including concurrency, compile-fix boundedness beyond the controller core, and cross-artifact semantic preservation. The paper is intentionally conservative: it specifies a reproducible prototype pipeline and evaluation plan rather than claiming end-to-end semantic verification or universal agent correctness.
+\end{abstract}
+
+\textbf{Keywords:} Graph-of-Thoughts, validator-driven generation, formal specification, TLA+, Rust deployment, Mixture-of-Experts, bounded reasoning, Ollama, provenance, agent synthesis
+
+\section{Introduction}
+Creating usable software agents from natural-language requirements remains difficult for two related reasons. First, the generation process must explore competing architectural decompositions rather than committing to a single brittle chain of reasoning. Second, the resulting artifacts should be checkable by external tools rather than accepted purely on the basis of model self-evaluation. These pressures make open-ended prompting a poor fit for tasks that ultimately need parsable diagrams, checkable specifications, and compilable code.
+
+GoT-AgentForge addresses this setting as a search-and-validate pipeline. Its controller core is inherited from HPC-GoT, a bounded typed state-transition controller for validator-backed architectural generation. That controller contributes the fixed resource discipline: controller depth capped at three levels, branching factor at most three, global controller-state budget $N=40$, fixed pruning threshold $\tau=0.85$, deterministic router-side scoring, and a single optional provenance-preserving merge at termination. GoT-AgentForge keeps those controller-level constraints and introduces a research-to-Rust pipeline around them.
+
+The resulting system is not proposed as a universal reasoning architecture. It is a narrow pipeline for tasks whose outputs admit at least partial deterministic validation: Mermaid and PlantUML/C4 diagrams can be rendered, TLA+ modules can be parsed and sometimes model-checked under bounded harnesses, and Rust crates can be compiled and tested. Prompt Master contributes orchestration discipline for the research phase through a seven-prompt cycle---Discovery, Research, Refinement, Validation, Transposition, Expansion, and Finalization---but does not contribute formal guarantees. The purpose of this paper is therefore twofold: to provide a self-contained specification of the inherited controller elements required for GoT-AgentForge, and to define the new system-level contracts and assumptions introduced by ORACLE, the extension registry, cross-artifact refinement, and deployment profiles.
+
+\paragraph{Scope and restraint.}
+The contribution is intentionally conservative. We do not claim global optimality, hallucination guarantees, semantic correctness of the final agent, or complete transfer of all HPC-GoT proofs to the new pipeline without added conditions. Instead, we specify which properties are inherited, which must be re-proved, and which remain implementation assumptions or future work.
+
+\section{Related Work and Positioning}
+The most relevant literature lies at the intersection of structured reasoning, validator-driven generation, formal specification, and practical local deployment.
+
+\paragraph{Structured reasoning topologies.}
+Chain-of-Thought and self-consistency scale test-time reasoning through intermediate steps and sampling, but are primarily answer-centric rather than validator-centric \citep{wei2022cot, wang2022selfconsistency}. Tree-of-Thoughts and Graph-of-Thoughts generalize this into structured search over intermediate reasoning objects \citep{yao2023tot, besta2023graph, besta2024graph}. GoT-AgentForge is closer to this family, but its contribution is narrower: a bounded controller and a typed artifact pipeline for externally validated outputs.
+
+\paragraph{Bounded validator-backed control.}
+HPC-GoT serves as the direct formal baseline for this work. Its contribution is a typed state-transition controller with explicit axioms, operator algebra, merge semantics, and controller-level proofs of termination, boundedness, batched stage count, stage-local pruning, and merge non-expansion. GoT-AgentForge inherits that controller core but adds new mechanisms beyond the original proof envelope.
+
+\paragraph{Prompt-orchestrated research workflows.}
+Prompt Master contributes a seven-stage prompt workflow, iterative document versioning, completeness checks across revisions, LaTeX transposition, code-generation orchestration, and final whitepaper integration. These are workflow assets, not theorem-bearing premises. In this paper they are used only to organize the research phase and document evolution.
+
+\paragraph{Formal and architectural artifact generation.}
+TLA+ supplies a practical formal-specification target for safety and liveness scaffolding \citep{lamport2002specifying}. Mermaid, PlantUML, and C4-style diagrams are useful because they admit deterministic render validation. Specula-style code-to-spec refinement and Mermate-style text-to-diagram generation motivate several of the pipeline transitions, though their guarantees are not assumed here unless explicitly stated.
+
+\paragraph{Position of this paper.}
+This paper is best read as a bounded, validator-driven prototype specification for research-to-Rust artifact generation. It is not a claim that all stages are fully verified. It is a claim that the controller core can be inherited from a theorem-safe bounded controller, and that the surrounding pipeline can be specified precisely enough to support implementation and future evaluation.
+
+\section{Preliminaries and Inheritance Boundary}
+This section defines the formal objects needed for GoT-AgentForge and states exactly what is inherited from HPC-GoT.
+
+\subsection{Specification instance and artifact universe}
+\begin{definition}[Specification instance]
+A specification instance is a triple
+\[
+S=(Q,I,T)
+\]
+where $Q$ is a natural-language task description, $I$ is a finite set of invariant predicates, and $T$ is a target artifact type.
+\end{definition}
+
+\begin{definition}[Artifact universe]
+Let $\mathcal{A}_T$ denote the set of artifacts of target type $T$. In this paper the relevant artifact types are
+\[
+T \in \{\texttt{Markdown},\texttt{Mermaid},\texttt{PlantUML/C4},\texttt{TLA+},\texttt{TSX},\texttt{RustCrate}\}.
+\]
+\end{definition}
+
+\begin{definition}[Required-element predicates]
+A required-element predicate is a deterministic indicator
+\[
+\iota_j : \mathcal{A}_T \to \{0,1\}
+\]
+that checks whether artifact $A$ contains a task-critical required element. Required-element predicates are included directly in the invariant set $I$, following the canonical HPC-GoT treatment.
+\end{definition}
+
+\subsection{Inherited controller axioms (restated)}
+The following items are inherited from HPC-GoT and restated here because GoT-AgentForge depends on them.
+
+\begin{axiom}[Typed controller state]
+A controller state is a tuple
+\[
+\Sigma = (\theta,\ell,A,\sigma,p,F,\pi)
+\]
+where $\theta$ is the current thought representation, $\ell \in \{0,1,2,3\}$ is the controller level, $A \in \mathcal{A}_T$ is the artifact currently attached to the state, $\sigma \in [0,1]$ is the canonical validity score, $p$ is a parent-state identifier, $F$ is a structured validator-failure trace, and $\pi$ is a provenance map. GoT-AgentForge extends this record operationally with an extension identifier $\phi$, but the inherited controller core is unchanged.
+\end{axiom}
+
+\begin{axiom}[Global budget]
+There exists a fixed controller-state budget $N$ with canonical value
+\[
+N=40.
+\]
+No valid execution may create more than $40$ controller states.
+\end{axiom}
+
+\begin{axiom}[Depth cap and branching factor]
+The controller level satisfies $\ell \in \{0,1,2,3\}$ and the branching factor at any branch step is at most $3$.
+\end{axiom}
+
+\begin{axiom}[Threshold pruning]
+The canonical pruning threshold is fixed at
+\[
+\tau = 0.85,
+\]
+and a candidate survives stage-local pruning if and only if $\sigma \ge \tau$.
+\end{axiom}
+
+\begin{axiom}[Single optional merge]
+At most one merge operation may be applied, and only at termination. Merge is a provenance-preserving rewrite over existing terminal states and does not create new controller states.
+\end{axiom}
+
+\begin{axiom}[Batching contract]
+Under the canonical schedule, all model-mediated generation for one level transition is executed in one batched orchestration stage. Validation, pruning, and selection are router-side deterministic computations and do not count as model-mediated stages.
+\end{axiom}
+
+\subsection{Canonical score}
+The canonical score inherited from HPC-GoT is
+\[
+\sigma(A,I,T)=\frac{1}{2}SV(A,T)+\frac{1}{2}IC(A,I),
+\]
+where
+\[
+SV(A,T) \in \{0,1\}
+\]
+represents structural validity under the target-specific validator harness, and
+\[
+IC(A,I)=
+\begin{cases}
+\frac{1}{|I|}\sum_{j=1}^{|I|} i_j(A), & |I|>0,\\
+1, & |I|=0
+\end{cases}
+\]
+represents invariant coverage. Here each $i_j$ is a deterministic invariant predicate, including required-element predicates.
+
+\begin{remark}[Interpretation of the score]
+The score is intentionally narrow. Structural validity guarantees only validator-level success such as render success, parse success, bounded model-checking success under a stated harness, or successful compilation under the chosen command. Invariant coverage guarantees only satisfaction of declared invariant predicates. Neither term guarantees architectural optimality or semantic correctness.
+\end{remark}
+
+\subsection{Inherited operator algebra}
+The controller operators inherited from HPC-GoT are:
+\begin{enumerate}[leftmargin=2em]
+    \item \textbf{Branch} $B(\Sigma,r)$: create up to $r\le 3$ child states.
+    \item \textbf{Decompose} $D(\Sigma_i)$: ask the model to produce an artifact in target form.
+    \item \textbf{Validate} $V(A_i,I,T)$: compute structural validity, failure trace, provenance, and score.
+    \item \textbf{Prune} $P_\tau(L)$: retain only states with $\sigma \ge \tau$.
+    \item \textbf{Select} $S(L)$: choose a maximal-score retained state, tie-broken by smaller failure trace.
+    \item \textbf{Merge} $M(A_1,A_2,A_3)$: optional termination-only merge rewrite under a deterministic conflict algebra.
+\end{enumerate}
+Only \textbf{Branch} increases controller-state count.
+
+\subsection{What is inherited vs. what is new}
+The following controller-level results are inherited from HPC-GoT \emph{only under the canonical schedule and only for the inherited controller core}:
+\begin{itemize}[leftmargin=2em]
+    \item termination after at most three level transitions;
+    \item global controller-state bound $|\Sigma_{created}|\le 40$;
+    \item batched model-mediated stage bound of at most $4$ under the canonical batching contract;
+    \item stage-local pruning property;
+    \item merge non-expansion.
+\end{itemize}
+
+The following \emph{do not transfer automatically} and are treated in this paper as newly specified mechanisms, assumptions, or future proof obligations:
+\begin{itemize}[leftmargin=2em]
+    \item ORACLE concurrency scheduling and disjoint-subtree checks;
+    \item bounded compile-fix repair outside the original controller core;
+    \item cross-artifact transitions from Mermaid to TLA+, TLA+ to TSX, TSX to Rust;
+    \item extension auto-registration semantics;
+    \item provenance DAG persistence and filesystem permissions;
+    \item hybrid deployment behavior when routing between local Ollama and Fireworks.
+\end{itemize}
+
+\section{Formal Reconstruction of GoT-AgentForge}
+\subsection{System model}
+We model GoT-AgentForge as
+\[
+\mathcal{F}=(\mathcal{E},\mathcal{V},\mathcal{O},\mathcal{M},\mathcal{P}),
+\]
+where:
+\begin{itemize}[leftmargin=2em]
+    \item $\mathcal{E}$ is the set of registered extensions;
+    \item $\mathcal{V}$ is the set of deterministic validator harnesses;
+    \item $\mathcal{O}$ is the ORACLE meta-controller;
+    \item $\mathcal{M}$ is the model pool;
+    \item $\mathcal{P}$ is the provenance store.
+\end{itemize}
+
+\paragraph{Input.}
+The input is a natural-language task description
+\[
+Q \in \Sigma^*
+\]
+with length at most $512$ tokens, together with an invariant set $I$ and an initial target artifact type $T$.
+
+\paragraph{Output.}
+The output is a tuple
+\[
+C=(B,T^\star,P,\pi)
+\]
+where $B$ is a Rust crate artifact, $T^\star$ is the final TLA+ artifact retained by the pipeline, $P$ is a provenance DAG, and $\pi$ is an append-only state-transition log.
+
+\paragraph{Success criterion.}
+At the pipeline level, a run is marked successful if it returns a Rust crate that satisfies the declared compile-and-test harness and if all mandatory earlier validator gates succeed. This is an \emph{operational success criterion}, not a semantic guarantee about the resulting agent's behavior.
+
+\subsection{Validator interfaces}
+For each artifact type $T$, define a deterministic validator interface
+\[
+V_T : \mathcal{A}_T \to \{0,1\} \times \mathcal{F}_T \times \Pi_T,
+\]
+where the output consists of:
+\begin{itemize}[leftmargin=2em]
+    \item a structural-validity bit;
+    \item a structured failure trace in target-specific failure space $\mathcal{F}_T$;
+    \item target-specific provenance metadata in space $\Pi_T$.
+\end{itemize}
+Examples include:
+\begin{itemize}[leftmargin=2em]
+    \item Mermaid CLI render success for Mermaid;
+    \item PlantUML render success for PlantUML/C4;
+    \item SANY parse success and optional TLC bounded-check success for TLA+;
+    \item TypeScript compiler or lint gates for TSX if included operationally;
+    \item \texttt{cargo check}, \texttt{cargo build --release}, and \texttt{cargo test --release} for Rust crates.
+\end{itemize}
+All validators with potentially unbounded runtime are assumed to operate under explicit router-side timeouts.
+
+\subsection{Extension interface}
+Each extension must satisfy the following operational contract.
+
+\begin{lstlisting}[language=Python,caption={Operational extension interface.}]
+class GoTExtension(ABC):
+    @abstractmethod
+    def register(self) -> None:
+        ...
+
+    @abstractmethod
+    def enhance(
+        self,
+        stage: str,
+        artifact: "Artifact",
+        invariants: "InvariantSet",
+        context: dict[str, object]
+    ) -> tuple["Artifact", float, "Trace", dict[str, object]]:
+        ...
+\end{lstlisting}
+
+The returned tuple contains the output artifact, the stage-local score, a failure trace, and extension-local provenance metadata.
+
+\subsection{ORACLE semantics}
+ORACLE is responsible for:
+\begin{enumerate}[leftmargin=2em]
+    \item enforcing the inherited budget guard before any state-creating operation;
+    \item scheduling stage execution;
+    \item serializing shared-state updates;
+    \item maintaining append-only provenance logs;
+    \item mediating repair decisions after validator failures;
+    \item mediating filesystem access to working directories and output repositories.
+\end{enumerate}
+
+Operationally, GoT-AgentForge augments the inherited controller state with an extension identifier $\phi$, but this extension field is not itself part of the inherited proofs.
+
+\subsection{Provenance semantics}
+We use two provenance objects:
+\begin{itemize}[leftmargin=2em]
+    \item a \textbf{state-transition log} $\pi$, append-only JSONL, containing timestamped controller events;
+    \item a \textbf{provenance DAG} $P$, whose nodes record stage, extension, score, parent identifiers, validator outcomes, and artifact references.
+\end{itemize}
+The append-only property is an implementation assumption to support auditability. The completeness of provenance with respect to all runtime side effects is not proved here.
+
+\subsection{Concurrency semantics}
+Concurrency is not inherited from HPC-GoT and is therefore specified operationally rather than theoremically. Two stages may execute concurrently only if ORACLE determines their state subtrees are disjoint and their writes target disjoint artifact scopes. Shared writes are serialized. This rule is intended to preserve the global controller-state bound, but a full proof of preservation for all implementation behaviors is left as future work.
+
+\subsection{Merge semantics}
+The inherited merge operator is preserved as a single optional termination-only rewrite over terminal artifacts. Let $A_1,A_2,A_3$ be terminal artifacts and let $A_b$ be the artifact of maximal score. Given a deterministic conflict predicate over typed elements, merge produces a provenance-preserving artifact $A^\star$ by retaining the best artifact and adding only compatible elements from the others. The merge is accepted only if
+\[
+\sigma(A^\star,I,T) \ge \max_i \sigma(A_i,I,T).
+\]
+This preserves the inherited merge discipline. However, semantic preservation across cross-artifact merges used by GoT-AgentForge remains an additional assumption unless the conflict algebra is explicitly defined for that artifact pair.
+
+\subsection{Failure and repair semantics}
+A stage returns failure if either:
+\begin{enumerate}[leftmargin=2em]
+    \item its validator failure trace is nonempty in a way marked fatal by the stage contract; or
+    \item its score falls below the threshold required for continuation.
+\end{enumerate}
+Failure triggers one of three ORACLE actions: prune, bounded repair, or terminal abort. Bounded repair is operational rather than inherited.
+
+\subsection{Compile-fix loop semantics}
+GoT-AgentForge adds a bounded compile-fix loop not present in the original controller. Let $k$ be the retry counter. The loop obeys
+\[
+0 \le k \le 5.
+\]
+At each iteration, compiler or test stderr is summarized into a new control prompt $\theta$ and passed to the code-generation extension. If the crate still fails after $k=5$, the pipeline terminates with a failure trace. This yields operational termination of the repair loop, but a proof that every retry interacts safely with the inherited controller-state budget requires an explicit accounting model and is not claimed here.
+
+\subsection{Deployment profile assumptions}
+We distinguish two deployment profiles.
+
+\paragraph{Profile 1: Local-Ollama.}
+The primary local profile assumes Ollama, Harmony-compatible prompting or equivalent structured routing, and a local model such as \texttt{gpt-oss-20b} or a quantized Llama-family model under the memory limits of an Apple M2 32 GB machine.
+
+\paragraph{Profile 2: Hybrid fallback.}
+The hybrid profile permits routing selected stages to Fireworks or a comparable hosted runtime when local latency or memory pressure exceeds a configured threshold. This profile is operationally useful but lies outside any inherited theorem.
+
+\section{Stage Contracts and Pipeline}
+The pipeline is organized into twelve stages grouped into four phases. Each stage obeys the generic contract
+\[
+(\text{stage},\text{extension},\text{input artifact},I) \mapsto (\text{output artifact},\sigma,F,\pi).
+\]
+Table~\ref{tab:stage-contracts} summarizes the concrete stages.
+
+\begin{landscape}
+\begin{table}[H]
+\centering
+\caption{Stage contracts for GoT-AgentForge.}
+\label{tab:stage-contracts}
+\begin{tabularx}{\linewidth}{>{\raggedright\arraybackslash}p{0.6cm} >{\raggedright\arraybackslash}p{2.2cm} >{\raggedright\arraybackslash}p{2.6cm} >{\raggedright\arraybackslash}p{3.5cm} >{\raggedright\arraybackslash}p{3.2cm} >{\raggedright\arraybackslash}p{2.4cm} >{\raggedright\arraybackslash}X}
+\toprule
+Stage & Extension & Input & Output & Validator / Gate & Continue if & Failure handling \\
+\midrule
+1 & SYSTEMS-SEARCH-ENGINE & $Q$ & Research corpus index / notes & source resolution, path sanity & required sources found & bounded retry or continue with partial corpus \\
+2 & STARWALKER & corpus + $Q$ & research memorandum / structured markdown & completeness checklist, required sections & $\sigma \ge \tau$ & revise research document \\
+3 & MERMATE & research memorandum & Mermaid / MMD / PlantUML scaffolds & Mermaid CLI, PlantUML render & render success and invariants met & repair diagram text \\
+4 & ORACLE merge & research memo + diagram-derived TLA scaffold & merged TLA working draft & merge acceptance rule & non-decreasing score & reject merge and keep best branch \\
+5 & SPECULA-BRIDGE & TLA working draft & refined TLA module & SANY, optional TLC timeout harness & parse success, timeout-safe checks pass & revise spec or prune \\
+6 & CODER & refined TLA + research memo & TSX or intermediate implementation plan & schema / syntax gate & stage-local acceptance & revise intermediate code \\
+7 & SPECULA-BRIDGE & TSX / implementation plan & refined TLA feedback artifact & SANY / consistency checks & stage-local acceptance & revise or prune \\
+8 & ORACLE review & TLA + TSX pair & consolidated implementation package & contract consistency checks & no fatal mismatch & return to stage 6 or 7 \\
+9 & CODER & consolidated package & Rust crate draft & Rust project skeleton sanity & stage-local acceptance & revise crate draft \\
+10 & CODER + ORACLE & Rust crate draft & repaired Rust crate & cargo check, build, test & compile-and-test harness passes & bounded compile-fix loop or abort \\
+11 & ORACLE QA & final crate + provenance & release candidate & provenance replay, artifact completeness checks & release gate passes & reject release candidate \\
+12 & ORACLE shipping & release candidate & repository export + audit metadata & path / repo policy checks & export succeeds & local archive only \\
+\bottomrule
+\end{tabularx}
+\end{table}
+\end{landscape}
+
+\subsection{Phase 1: Ingestion and research}
+\textbf{Stage 1: SYSTEMS-SEARCH-ENGINE.} This stage resolves the initial project idea into a local research corpus, filesystem references, and existing materials. It is useful but not itself part of the inherited controller proofs.
+
+\textbf{Stage 2: STARWALKER.} This stage applies the Prompt Master workflow as orchestration logic only. The seven steps are Discovery, Research, Refinement, Validation, Transposition, Expansion, and Finalization. The output is a structured research memorandum that can serve as an input artifact for architectural and formal stages.
+
+\subsection{Phase 2: Architecture and formal specification}
+\textbf{Stage 3: MERMATE.} The research memorandum is mapped into diagrammatic artifacts and an initial formal scaffold. Structural validity is checked by render and parse tools, not by the model.
+
+\textbf{Stage 4: ORACLE merge.} A termination-style merge over candidate terminal artifacts is used to combine research and specification outputs when the non-decreasing-score acceptance rule is satisfied.
+
+\textbf{Stage 5: SPECULA-BRIDGE.} The merged TLA working draft is refined into a TLA+ module that must at minimum parse successfully under SANY and may optionally be checked under TLC with a strict timeout.
+
+\subsection{Phase 3: Code refinement and Rust generation}
+\textbf{Stages 6--10.} These stages generate a TSX or equivalent implementation plan, refine the formal specification, consolidate interfaces, construct a Rust crate, and execute the bounded compile-fix loop under ORACLE supervision.
+
+\subsection{Phase 4: QA and export}
+\textbf{Stages 11--12.} The final phases replay provenance, check artifact completeness, and export the release candidate into a target repository or archive location.
+
+\section{Inherited Results and New Proof Obligations}
+\subsection{Inherited controller-level results}
+Under the inherited canonical HPC-GoT schedule, the following results continue to hold for the controller core:
+\begin{theorem}[Inherited termination, controller core]
+If execution follows the inherited canonical schedule and uses only the inherited controller operators under the stated budget, then the controller terminates after at most three level transitions.
+\end{theorem}
+
+\begin{theorem}[Inherited global controller-state bound, controller core]
+Under any execution that respects the inherited budget guard, the number of created controller states satisfies
+\[
+|\Sigma_{created}| \le 40.
+\]
+\end{theorem}
+
+\begin{theorem}[Inherited batched stage bound, controller core]
+Under the inherited batching contract, the number of model-mediated controller stages is at most
+\[
+3 + \mathbf{1}\{\text{merge used}\} \le 4.
+\]
+\end{theorem}
+
+\begin{theorem}[Inherited stage-local pruning property]
+For any finite candidate set $L$ at a fixed controller level and pruning operator $P_\tau$, one has
+\[
+\max_{x\in P_\tau(L)} \sigma(x) \le \max_{x\in L} \sigma(x),
+\]
+with equality whenever some maximizer of $L$ survives pruning.
+\end{theorem}
+
+\begin{theorem}[Inherited merge non-expansion]
+The inherited merge operator does not increase controller-state count.
+\end{theorem}
+
+\subsection{New proof obligations introduced by GoT-AgentForge}
+The following properties are \emph{not claimed as inherited theorems} and require separate proof or empirical justification.
+
+\begin{enumerate}[leftmargin=2em]
+    \item \textbf{Concurrency preservation.} ORACLE's disjoint-subtree rule should preserve the inherited budget and avoid state corruption, but a full proof is not provided here.
+    \item \textbf{Compile-fix accounting.} The bounded compile-fix loop terminates operationally, but its interaction with the inherited controller-state count depends on how repair iterations are represented.
+    \item \textbf{Cross-artifact invariant preservation.} We do not prove that invariants preserved at the Mermaid or TLA+ level transfer soundly to TSX or Rust artifacts.
+    \item \textbf{Extension-registration determinism.} Auto-discovery and registration order are implementation concerns rather than formal theorems.
+    \item \textbf{Hybrid deployment equivalence.} We do not claim semantic equivalence between local and hosted execution profiles.
+\end{enumerate}
+
+\section{Implementation Notes}
+\subsection{Harmony-compatible routing}
+The inherited HPC-GoT implementation guidance recommends a controller layer, a prompt compiler, and a validator layer. GoT-AgentForge adopts the same architecture. Where strict structured outputs are available, they should be enforced. Otherwise, deterministic repair-or-reask logic may be used at the router level. Such engineering details support robust implementation but are not themselves part of the inherited proofs.
+
+\subsection{Representative validator harnesses}
+Representative validator commands include:
+\begin{lstlisting}[language=bash,caption={Representative validator commands.}]
+# Mermaid
+mmdc -i diagram.mmd -o diagram.svg
+
+# PlantUML
+plantuml diagram.puml
+
+# TLA+ parse check
+java -cp tla2tools.jar tla2sany.SANY MySpec.tla
+
+# Optional bounded TLC check
+java -cp tla2tools.jar tlc2.TLC MySpec.tla
+
+# Rust
+cargo check
+cargo build --release
+cargo test --release
+\end{lstlisting}
+Timeout policy for TLC-backed validation must be explicit because model-checking cost is workload-sensitive.
+
+\subsection{Auto-registration and repository layout}
+A practical extension layout is:
+\begin{lstlisting}[language=bash,caption={Illustrative extension layout.}]
+gpt_oss/
+  extensions/
+    oracle/
+    starwalker/
+    mermate/
+    specula_bridge/
+    coder/
+    systems_search_engine/
+\end{lstlisting}
+Auto-registration through package initialization is convenient, but deterministic extension ordering and version pinning should be documented in the reproducibility appendix.
+
+\section{Evaluation Plan}
+This paper does not claim completed experiments. Instead, it specifies the minimum evaluation required for a defensible public release.
+
+\subsection{Benchmark families}
+Recommended benchmark families include:
+\begin{enumerate}[leftmargin=2em]
+    \item Mermaid and PlantUML/C4 architectural artifacts;
+    \item TLA+ safety or liveness scaffolds under SANY and bounded TLC harnesses;
+    \item small Rust agent families such as rate limiters, workflow automators, and bounded coordination agents.
+\end{enumerate}
+
+\subsection{Baselines}
+Recommended baselines include plain Chain-of-Thought, self-consistency, Tree-of-Thoughts, Graph-of-Thoughts, and ablations of the inherited controller parameters.
+
+\subsection{Metrics}
+Primary automated metrics should include validator pass rate, mean invariant coverage, mean $\sigma$, compile success, and wall-clock latency with full hardware disclosure. Secondary metrics may include contradiction rate where deterministically measurable, token usage, peak context length, and blinded human architectural assessment.
+
+\subsection{Statistical protocol}
+If stochastic generation is used, the recommended protocol is at least five random seeds with mean $\pm$ 95\% confidence intervals and paired statistical tests where appropriate. A minimal public release should include at least one fully logged end-to-end prototype run and its provenance log.
+
+\section{Threat Model and Limitations}
+GoT-AgentForge inherits the central limitation of HPC-GoT: controller-level guarantees do not imply semantic correctness. An artifact may parse, render, or compile successfully while still being conceptually poor, insecure, or misaligned with the intended task.
+
+External validators guarantee only what their harnesses check. Mermaid CLI validates renderability, not architectural adequacy. SANY validates parsing, not necessarily system-level correctness. TLC under timeout gives bounded evidence only. Cargo build and test validate only the declared compile-and-test harness, not complete behavioral correctness.
+
+The pipeline also introduces new risks beyond HPC-GoT:
+\begin{itemize}[leftmargin=2em]
+    \item concurrency bugs in ORACLE scheduling or shared-state handling;
+    \item incomplete provenance if runtime side effects escape the append-only log;
+    \item nondeterminism introduced by local runtime configuration, schema-repair logic, or hosted fallback;
+    \item mismatches between formal and implementation-level artifacts across Mermaid, TLA+, TSX, and Rust transitions;
+    \item repository-export or filesystem-permission errors at the release stage.
+\end{itemize}
+
+Accordingly, the correct interpretation of this paper is not ``verified agent synthesis'' but rather ``bounded validator-driven prototype synthesis with explicit operational contracts.''
+
+\section{Conclusion}
+GoT-AgentForge specifies a bounded, validator-driven prototype pipeline for research-to-Rust artifact generation under local or hybrid Mixture-of-Experts deployment assumptions. Its formal backbone is inherited from HPC-GoT: typed controller states, bounded branching, fixed budget, deterministic validator scoring, threshold pruning, and an optional single merge. Around that core, the paper adds explicit extension contracts, ORACLE-based provenance semantics, Prompt Master workflow orchestration for the research phase, stage-wise artifact transitions, and a minimum reproducibility and evaluation plan.
+
+The central result of this paper is therefore not an end-to-end correctness theorem. It is a self-contained specification that clearly distinguishes inherited controller guarantees from new assumptions and unresolved proof obligations. That distinction is necessary if the framework is to serve as a credible basis for implementation, experimentation, and future formal strengthening.
+
+\appendix
+
+\section{Restated HPC-GoT Core}
+This appendix records the controller elements from HPC-GoT that GoT-AgentForge depends on.
+
+\subsection{State and score}
+The inherited controller state is
+\[
+\Sigma=(\theta,\ell,A,\sigma,p,F,\pi)
+\]
+with $\ell\in\{0,1,2,3\}$. The canonical score is
+\[
+\sigma(A,I,T)=\frac{1}{2}SV(A,T)+\frac{1}{2}IC(A,I).
+\]
+
+\subsection{Budget and branching}
+The inherited controller obeys:
+\[
+N=40,\qquad \ell\le 3,\qquad \text{branching factor}\le 3.
+\]
+
+\subsection{Pruning and selection}
+Pruning is threshold-based with
+\[
+P_\tau(L)=\{\Sigma\in L \mid \sigma(\Sigma)\ge \tau\},\qquad \tau=0.85.
+\]
+Selection returns a maximal-score state, tie-broken by smaller failure-trace cardinality.
+
+\subsection{Canonical schedule}
+The inherited canonical schedule is:
+\begin{enumerate}[leftmargin=2em]
+    \item initialize the root state at level $0$;
+    \item for levels $0,1,2$: batch-branch all surviving states, decompose and validate all resulting children, prune at threshold $\tau$, then advance one level;
+    \item at level $3$, optionally apply a single merge step to top surviving leaves;
+    \item return the selected terminal artifact together with score and audit metadata.
+\end{enumerate}
+
+\subsection{Merge discipline}
+Merge is optional, applied at most once, only at termination, and does not create new controller states.
+
+\section{Comparison Summary}
+\begin{table}[H]
+\centering
+\caption{Positioning summary.}
+\begin{tabularx}{\linewidth}{>{\raggedright\arraybackslash}p{3.2cm} >{\raggedright\arraybackslash}p{2cm} >{\raggedright\arraybackslash}p{2.1cm} >{\raggedright\arraybackslash}p{2.5cm} X}
+\toprule
+System & Hard controller bounds & External deterministic validators & Target artifacts & Notes \\
+\midrule
+Chain-of-Thought & No & No & Answers / text & Sequential reasoning, answer-centric \\
+Tree-of-Thoughts & Usually no hard global bound & Not central & Thought trees / answers & Search over intermediate thoughts \\
+Graph-of-Thoughts & Topology generalization & Optional & Graph-structured reasoning artifacts & Flexible topology, not necessarily validator-backed \\
+HPC-GoT & Yes & Yes & Architectural artifacts & Theorem-safe bounded controller core \\
+GoT-AgentForge & Controller core inherited & Yes & Research memo, diagrams, TLA+, TSX, Rust & Prototype pipeline around inherited controller \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\section{Reproducibility Checklist}
+A defensible implementation release should include:
+\begin{enumerate}[leftmargin=2em]
+    \item exact model runtime and version information;
+    \item Modelfile or equivalent runtime configuration;
+    \item validator wrapper scripts and timeout settings;
+    \item extension registration order and version pins;
+    \item benchmark tasks and seed list;
+    \item a sample provenance JSONL log;
+    \item repository layout and export scripts.
+\end{enumerate}
+
+\section{Illustrative Provenance Record}
+\begin{lstlisting}[language=json,caption={Illustrative provenance JSONL event.}]
+{"ts":"2026-03-13T12:00:00Z",
+ "stage":5,
+ "extension":"specula_bridge",
+ "parent":"Sigma2.1",
+ "artifact":"MySpec.tla",
+ "sigma":0.91,
+ "validator":{"sany":true,"tlc_timeout":true},
+ "action":"retain"}
+\end{lstlisting}
+
+\begin{thebibliography}{99}
+\bibitem{wei2022cot}
+J. Wei, X. Wang, D. Schuurmans, M. Bosma, B. Ichter, F. Xia, E. Chi, Q. Le, and D. Zhou.
+Chain-of-Thought Prompting Elicits Reasoning in Large Language Models.
+\emph{Advances in Neural Information Processing Systems}, 2022.
+
+\bibitem{wang2022selfconsistency}
+X. Wang, J. Wei, D. Schuurmans, Q. Le, E. Chi, S. Narayan, A. Chowdhery, and D. Zhou.
+Self-Consistency Improves Chain of Thought Reasoning in Language Models.
+\emph{arXiv preprint arXiv:2203.11171}, 2022.
+
+\bibitem{yao2023tot}
+S. Yao, D. Yu, J. Zhao, I. Shafran, T. Griffiths, Y. Cao, and K. Narasimhan.
+Tree of Thoughts: Deliberate Problem Solving with Large Language Models.
+\emph{arXiv preprint arXiv:2305.10601}, 2023.
+
+\bibitem{besta2023graph}
+M. Besta, N. Blach, A. Kubicek, R. Gerstenberger, M. Podstawski, C. Hoefler, and T. Nitsche.
+Graph of Thoughts: Solving Elaborate Problems with Large Language Models.
+\emph{arXiv preprint arXiv:2308.09687}, 2023.
+
+\bibitem{besta2024graph}
+M. Besta, N. Blach, A. Kubicek, R. Gerstenberger, M. Podstawski, C. Hoefler, and T. Nitsche.
+Graph of Thoughts: Solving Elaborate Problems with Large Language Models.
+\emph{Proceedings of the AAAI Conference on Artificial Intelligence}, 2024.
+
+\bibitem{lamport2002specifying}
+L. Lamport.
+\emph{Specifying Systems: The TLA+ Language and Tools for Hardware and Software Engineers}.
+Addison-Wesley, 2002.
+
+\bibitem{kawalec2026hcpgot}
+D. Kawalec.
+HPC-GoT: A Bounded Hierarchical Reasoning Controller for Local 21B-Scale Mixture-of-Experts Models on Architectural System-Specification Tasks.
+Unpublished manuscript, March 2026.
+
+\bibitem{kawalec2025promptmaster}
+D. Kawalec.
+Comprehensive Master Thesis on Prompt Engineering and Protocol Development.
+Unpublished manuscript, February 2025.
+
+\bibitem{kawalec2026mermate}
+D. Kawalec.
+Mermate repository and technical notes.
+GitHub repository, 2026.
+
+\bibitem{kawalec2026specula}
+D. Kawalec.
+Specula repository and technical notes.
+GitHub repository, 2026.
+\end{thebibliography}
+
+\end{document}

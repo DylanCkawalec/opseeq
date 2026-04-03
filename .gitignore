@@ -7,12 +7,13 @@ coverage/
 dist/
 docs/_build/
 node_modules/
-
+corethink-claw.tex
+opseeq-architecture.png
 # OS metadata
 .DS_Store
 desktop.ini
 Thumbs.db
-
+opseeq-architecture.md
 # Project-specific
 draft_newsletter_*
 research/

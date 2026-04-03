@@ -1,0 +1,143 @@
+version: 1
+name: nemoclaw-godmode-default
+mode: deny_and_ask
+whitepaper_law:
+  local_first: true
+  artifact_immutable: true
+  human_invariant_layer: true
+  out_of_trust_never_authoritative: true
+  probabilistic_outputs_not_truth: true
+  explicit_permission_required: true
+  rollback_required: true
+  graph_provenance_required: true
+  temporal_causality_required: true
+
+models:
+  supervisor_default: gpt-oss:20b
+  execution_default: gpt-oss:20b
+  anthropic_out_of_trust: true
+  remote_requires_explicit_approval: true
+
+filesystem:
+  require_absolute_paths: true
+  default_roots:
+    - /Users/dylanckawalec/Desktop/developer
+  deny_patterns:
+    - "/System/**"
+    - "/Library/**"
+    - "/private/var/db/**"
+    - "~/.ssh/**"
+    - "~/.gnupg/**"
+    - "~/.aws/**"
+    - "~/Library/Keychains/**"
+  destructive_requires_confirmation: true
+  destructive_ops:
+    - rm
+    - mv
+    - chmod
+    - chown
+    - diskutil
+    - dd
+    - mkfs
+    - hdiutil
+    - find -delete
+    - git clean
+    - git reset --hard
+
+network:
+  default_mode: local_only
+  allowed_local:
+    - http://127.0.0.1:*
+    - http://localhost:*
+    - http://host.docker.internal:*
+  allowed_remote_if_explicitly_approved:
+    - https://api.anthropic.com/*
+  deny_by_default: true
+
+process:
+  require_tmux_execution_bus: true
+  require_iterm2_bridge: true
+  blocked_commands:
+    - launchctl bootout system
+    - csrutil
+    - nvram
+    - kextload
+    - spctl --master-disable
+    - sqlite3 ~/Library/Safari
+  blocked_persistence_patterns:
+    - ~/Library/LaunchAgents
+    - ~/.zshrc
+    - ~/.bash_profile
+    - ~/.config/fish/config.fish
+
+living_architecture_graph:
+  required_node_kinds:
+    - intent
+    - axiom
+    - postulate
+    - lemma
+    - corollary
+    - service
+    - artifact
+    - decision
+    - approval
+    - validation
+    - extension
+  required_edge_relations:
+    - informs
+    - constrains
+    - derives
+    - produces
+    - validates
+    - approves
+    - criticizes
+    - routes_to
+  require_version_on_execution: true
+
+temporal_causality:
+  required_event_kinds:
+    - intent_received
+    - observe
+    - orient
+    - decide
+    - approve
+    - act
+    - validate
+    - meta_critique
+    - artifact_written
+    - graph_versioned
+  freeze_on_gap: true
+
+observability:
+  event_log_jsonl: ~/.opseeq-superior/logs/events.jsonl
+  command_log_jsonl: ~/.opseeq-superior/logs/commands.jsonl
+  causality_log_jsonl: ~/.opseeq-superior/logs/temporal-causality.jsonl
+  artifact_root: ~/.opseeq-superior/artifacts
+  graph_file: ~/.opseeq-superior/living-architecture-graph.json
+  hash_prompts: true
+  redact_env_keys:
+    - ANTHROPIC_API_KEY
+    - OPENAI_API_KEY
+    - AWS_SECRET_ACCESS_KEY
+    - GH_TOKEN
+
+malware_detection:
+  enabled: true
+  heuristics:
+    - persistence_installation
+    - shell_history_tampering
+    - credential_harvest_pattern
+    - unauthorized_remote_egress
+    - destructive_bulk_delete
+    - quarantine_bypass
+    - hidden_launch_agent_creation
+    - tmux_bypass_attempt
+    - graphless_execution_attempt
+  action_on_hit: freeze_and_require_human_review
+
+artifacts:
+  require_plan_hash: true
+  require_policy_hash: true
+  require_execution_manifest: true
+  require_rollback_manifest: true
+  require_meta_critique: true
