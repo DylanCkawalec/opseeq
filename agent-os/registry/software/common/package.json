@@ -1,0 +1,37 @@
+{
+  "name": "@rivet-dev/agent-os-common",
+  "version": "0.0.260331072558",
+  "type": "module",
+  "license": "Apache-2.0",
+  "description": "Common WASM command set for agentOS (coreutils + sed + grep + gawk + findutils + diffutils + tar + gzip)",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "check-types": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@rivet-dev/agent-os-coreutils": "workspace:*",
+    "@rivet-dev/agent-os-sed": "workspace:*",
+    "@rivet-dev/agent-os-grep": "workspace:*",
+    "@rivet-dev/agent-os-gawk": "workspace:*",
+    "@rivet-dev/agent-os-findutils": "workspace:*",
+    "@rivet-dev/agent-os-diffutils": "workspace:*",
+    "@rivet-dev/agent-os-tar": "workspace:*",
+    "@rivet-dev/agent-os-gzip": "workspace:*"
+  },
+  "devDependencies": {
+    "@rivet-dev/agent-os-registry-types": "link:../../../packages/registry-types",
+    "@types/node": "^22.10.2",
+    "typescript": "^5.9.2"
+  }
+}

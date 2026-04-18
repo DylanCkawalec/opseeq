@@ -1,0 +1,7 @@
+{
+  "name": "@rivet-dev/agent-os-file",
+  "type": "wasm",
+  "description": "file type detection",
+  "aptName": "file",
+  "source": "rust"
+}

@@ -27,7 +27,7 @@ pub async fn call(
         .post(&url)
         .header("Content-Type", "application/json")
         .header("x-api-key", &provider.api_key)
-        .header("anthropic-version", "2023-06-01")
+        .header("anthropic-version", "2024-10-22")
         .json(&body)
         .send()
         .await

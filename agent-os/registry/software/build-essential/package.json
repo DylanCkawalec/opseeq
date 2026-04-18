@@ -1,0 +1,32 @@
+{
+  "name": "@rivet-dev/agent-os-build-essential",
+  "version": "0.0.260331072558",
+  "type": "module",
+  "license": "Apache-2.0",
+  "description": "Build-essential WASM command set for agentOS (common + make + git)",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "check-types": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@rivet-dev/agent-os-common": "workspace:*",
+    "@rivet-dev/agent-os-make": "workspace:*",
+    "@rivet-dev/agent-os-git": "workspace:*"
+  },
+  "devDependencies": {
+    "@rivet-dev/agent-os-registry-types": "link:../../../packages/registry-types",
+    "@types/node": "^22.10.2",
+    "typescript": "^5.9.2"
+  }
+}

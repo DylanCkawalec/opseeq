@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProviderConfig {
@@ -19,6 +20,8 @@ pub struct KernelConfig {
     pub tau_explore: f64,
     pub tau_production: f64,
     pub tau_deploy: f64,
+    /// O(1) model-id -> provider-index lookup, built once at load time.
+    pub model_map: HashMap<String, usize>,
 }
 
 fn env_or(key: &str, default: &str) -> String {
@@ -69,7 +72,7 @@ pub fn load_config() -> KernelConfig {
             api_key: key,
             models: parse_models(
                 "ANTHROPIC_MODELS",
-                "claude-4-opus,claude-4-sonnet,claude-3.5-sonnet",
+                "claude-opus-4-6,claude-sonnet-4-6,claude-haiku-4-5-20251001",
             ),
             priority: 3,
         });
@@ -105,11 +108,21 @@ pub fn load_config() -> KernelConfig {
 
     providers.sort_by_key(|p| p.priority);
 
+    let mut model_map = HashMap::new();
+    for (i, p) in providers.iter().enumerate() {
+        for m in &p.models {
+            model_map.entry(m.clone()).or_insert(i);
+        }
+    }
+
     let has_nim = providers.iter().any(|p| p.name.contains("nim"));
+    let has_anthropic = providers.iter().any(|p| p.name == "anthropic");
     let default_model = env_or(
         "OPSEEQ_DEFAULT_MODEL",
         if has_nim {
             "nvidia/nemotron-3-super-120b-a12b"
+        } else if has_anthropic {
+            "claude-sonnet-4-6"
         } else {
             "gpt-4o"
         },
@@ -128,5 +141,6 @@ pub fn load_config() -> KernelConfig {
         tau_explore: env_or("OPSEEQ_TAU_EXPLORE", "0.7").parse().unwrap_or(0.7),
         tau_production: env_or("OPSEEQ_TAU_PRODUCTION", "0.85").parse().unwrap_or(0.85),
         tau_deploy: env_or("OPSEEQ_TAU_DEPLOY", "0.9").parse().unwrap_or(0.9),
+        model_map,
     }
 }

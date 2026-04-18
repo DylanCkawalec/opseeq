@@ -1,0 +1,74 @@
+{
+	"name": "@rivet-dev/agent-os-core",
+	"version": "0.1.0",
+	"type": "module",
+	"license": "Apache-2.0",
+	"main": "./dist/index.js",
+	"types": "./dist/index.d.ts",
+	"files": [
+		"dist",
+		"fixtures"
+	],
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.js",
+			"default": "./dist/index.js"
+		},
+		"./test/file-system": {
+			"types": "./dist/test/file-system.d.ts",
+			"import": "./dist/test/file-system.js",
+			"default": "./dist/test/file-system.js"
+		},
+		"./test/docker": {
+			"types": "./dist/test/docker.d.ts",
+			"import": "./dist/test/docker.js",
+			"default": "./dist/test/docker.js"
+		}
+	},
+	"scripts": {
+		"check-types": "tsc --noEmit",
+		"build": "tsc",
+		"test": "vitest run"
+	},
+	"dependencies": {
+		"@secure-exec/core": "^0.2.1",
+		"@secure-exec/nodejs": "^0.2.1",
+		"@rivet-dev/agent-os-python": "workspace:*",
+		"@secure-exec/v8": "^0.2.1",
+		"@rivet-dev/agent-os-posix": "workspace:*",
+		"croner": "^10.0.1",
+		"long-timeout": "^0.1.1",
+		"secure-exec": "^0.2.1"
+	},
+	"devDependencies": {
+		"@anthropic-ai/claude-code": "^2.1.86",
+		"@copilotkit/llmock": "^1.6.0",
+		"@mariozechner/pi-coding-agent": "^0.60.0",
+		"@rivet-dev/agent-os-pi": "link:../../registry/agent/pi",
+		"@rivet-dev/agent-os-pi-cli": "link:../../registry/agent/pi-cli",
+		"@rivet-dev/agent-os-codex": "link:../../registry/software/codex",
+		"@rivet-dev/agent-os-coreutils": "link:../../registry/software/coreutils",
+		"@rivet-dev/agent-os-curl": "link:../../registry/software/curl",
+		"@rivet-dev/agent-os-diffutils": "link:../../registry/software/diffutils",
+		"@rivet-dev/agent-os-fd": "link:../../registry/software/fd",
+		"@rivet-dev/agent-os-file": "link:../../registry/software/file",
+		"@rivet-dev/agent-os-findutils": "link:../../registry/software/findutils",
+		"@rivet-dev/agent-os-gawk": "link:../../registry/software/gawk",
+		"@rivet-dev/agent-os-grep": "link:../../registry/software/grep",
+		"@rivet-dev/agent-os-gzip": "link:../../registry/software/gzip",
+		"@rivet-dev/agent-os-jq": "link:../../registry/software/jq",
+		"@rivet-dev/agent-os-ripgrep": "link:../../registry/software/ripgrep",
+		"@rivet-dev/agent-os-sed": "link:../../registry/software/sed",
+		"@rivet-dev/agent-os-tar": "link:../../registry/software/tar",
+		"@rivet-dev/agent-os-tree": "link:../../registry/software/tree",
+		"@rivet-dev/agent-os-yq": "link:../../registry/software/yq",
+		"@types/node": "^22.10.2",
+		"opencode-ai": "^1.3.3",
+		"pi-acp": "^0.0.23",
+		"sandbox-agent": "^0.4.2",
+		"typescript": "^5.7.2",
+		"vitest": "^2.1.8",
+		"zod": "^3.25.0"
+	}
+}

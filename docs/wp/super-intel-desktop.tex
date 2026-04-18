@@ -1,0 +1,372 @@
+
+% !TEX TS-program = xelatex
+\documentclass[11pt]{article}
+
+% -----------------------------
+% Packages
+% -----------------------------
+\usepackage[a4paper,margin=1in]{geometry}
+\usepackage{fontspec}
+\usepackage{microtype}
+\usepackage{hyperref}
+\usepackage{bookmark}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{booktabs}
+\usepackage{xcolor}
+\usepackage{enumitem}
+\usepackage{titlesec}
+\usepackage{fancyhdr}
+\usepackage{graphicx}
+\usepackage{listings}
+\usepackage{amsmath,amssymb}
+\usepackage{verbatim}
+\usepackage{caption}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=blue,
+  urlcolor=blue,
+  citecolor=blue
+}
+
+\setmainfont{TeX Gyre Pagella}
+
+% -----------------------------
+% Styling
+% -----------------------------
+\titleformat{\section}{\Large\bfseries}{\thesection}{0.75em}{}
+\titleformat{\subsection}{\large\bfseries}{\thesubsection}{0.75em}{}
+\titleformat{\subsubsection}{\normalsize\bfseries}{\thesubsubsection}{0.75em}{}
+
+\setlist[itemize]{topsep=4pt,itemsep=3pt,parsep=0pt,partopsep=0pt}
+
+\pagestyle{fancy}
+\fancyhf{}
+\lhead{Sovereign Desktop Superintelligence}
+\rhead{Local-First Formal-Agentic Engineering}
+\cfoot{\thepage}
+
+% -----------------------------
+% Document metadata
+% -----------------------------
+\title{\textbf{Sovereign Desktop Superintelligence}\\
+\large Local-First Formal-Agentic Engineering Pipeline\\
+\vspace{0.25em}
+\small (Includes: Recommended Full Local Stack --- March 2026)}
+\author{Dylan Kawalec\\\small chaotic beauty LLC}
+\date{March 5, 2026\\\small Version 1.0 \quad\textbar\quad License: CC BY 4.0 (recommended)}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+This document presents a complete, closed-loop, local-first engineering factory that generates
+reviewable artifacts (specs, invariants, proofs/checks, code, tests, builds) instead of opaque outputs.
+It begins from human-authored invariants, formalizes behavior with TLA+/PlusCal and verification-aware
+languages (e.g., Dafny), compiles verified requirements into a living PRD, and drives agentic code synthesis
+and repair using locally hosted open-weight models. Observability and runtime isolation (eBPF, OpenTelemetry,
+WebAssembly/Tauri) are used to create traceable telemetry and to distill recurring patterns into Executable Service
+Components (ESCs). Any external “sanity oracle” (e.g., Grok via API) is explicitly optional and out-of-trust-boundary.
+\end{abstract}
+
+\tableofcontents
+\newpage
+
+% ============================================================
+\section{Executive Summary}
+
+The goal is to build a desktop ``AI engineering OS'' that:
+\begin{itemize}
+  \item Runs primarily on local hardware with open-source tools and open-weight models.
+  \item Is composable and inspectable end-to-end.
+  \item Produces \emph{reviewable} artifacts (specs, proofs, code, tests, builds) rather than unverifiable outputs.
+  \item Enforces traceability from every generated artifact back to human-authored invariants.
+\end{itemize}
+
+The system is designed as a deterministic loop with explicit boundaries:
+\begin{itemize}
+  \item \textbf{In-trust:} local inference, local orchestration, formal checking, local testing, local artifact storage.
+  \item \textbf{Out-of-trust (optional):} any external oracle/model API calls used only for critique/triangulation.
+\end{itemize}
+
+% ============================================================
+\section{Core Layers of the Pipeline}
+
+\subsection{Human Invariant Layer}
+
+The Human Invariant Layer is the sole human-only step where the engineer authors the immutable foundation
+of correctness and intent, using the \textbf{APCL methodology}:
+
+\begin{itemize}
+  \item \textbf{Axioms:} non-negotiable truths and constraints.
+  \item \textbf{Postulates:} assumed properties and operating conditions.
+  \item \textbf{Corollaries:} derived constraints that must hold if axioms/postulates hold.
+  \item \textbf{Lemmas:} intermediate claims required to prove corollaries or discharge proof obligations.
+\end{itemize}
+
+The invariants also include:
+\begin{itemize}
+  \item Safety and liveness properties (temporal logic).
+  \item Resource budgets (token limits, vCPU cores, RAM, disk, latency caps).
+  \item Loop intent (purpose, end-state, success metrics, termination and escalation rules).
+\end{itemize}
+
+\subsection{OODA Execution Layer (Local Open-Source Assistants)}
+
+The OODA layer is the persistent autonomous ``engine room'' of the workflow.
+OODA stands for \textbf{Observe -- Orient -- Decide -- Act}.
+
+\subsubsection{Inputs}
+Each iteration ingests:
+\begin{itemize}
+  \item Research artifacts (papers, notes, PDFs, Markdown).
+  \item Codebase state (git diffs, issues, history).
+  \item Exhaustive test results (unit, integration, fuzz/property tests).
+  \item Deep telemetry (eBPF probes, OpenTelemetry traces/metrics/logs).
+\end{itemize}
+
+\subsubsection{Model/Tooling Examples}
+Examples of local assistants include:
+\begin{itemize}
+  \item Terminal-native multi-agent coding assistants (e.g., CodeBuff-like role).
+  \item Local forks of large coding models (e.g., Kimi K2.5).
+  \item DeepSeek-Coder-style families (e.g., DeepSeek-V3.2) for long-horizon engineering.
+\end{itemize}
+
+\subsubsection{OODA Stages}
+\begin{enumerate}[leftmargin=2em]
+  \item \textbf{Observe:} watch folders, git hooks, test logs, telemetry streams.
+  \item \textbf{Orient:} cross-reference observations against APCL invariants and long-term memory.
+  \item \textbf{Decide:} produce a concrete action plan (regenerate validator, strengthen tests, distill telemetry).
+  \item \textbf{Act:} execute changes, compile/regenerate micro-components, update memory, log traceability.
+\end{enumerate}
+
+\subsubsection{Hypervelocity Components and ESCs}
+\textbf{Hypervelocity components} are ultra-lightweight single-responsibility skill binaries (often $<5$ MB)
+regenerated on-demand to remain tailored to the current task.
+
+\textbf{Executable Service Components (ESCs)} are self-learning service binaries baked into the local environment,
+distilling recurring runtime patterns into optimized components.
+
+\subsection{Formal Specification \& Verification Layer}
+
+This layer converts the refined understanding from OODA into a mathematically checkable blueprint.
+
+\subsubsection{Key Concepts}
+\begin{itemize}
+  \item \textbf{TLA+}: Temporal Logic of Actions specification language for concurrent/distributed systems.
+  \item \textbf{PlusCal}: algorithmic notation translated into TLA+.
+  \item \textbf{TLC}: explicit-state model checker.
+  \item \textbf{Apalache}: symbolic model checker for larger state spaces.
+  \item \textbf{Dafny}: verification-aware language/compiler for executable specifications and proofs.
+  \item \textbf{SMT solvers}: Z3/cvc5 to discharge proof obligations.
+\end{itemize}
+
+\subsubsection{Formal Process}
+\begin{enumerate}[leftmargin=2em]
+  \item \textbf{One-shot formal emission:} a model emits a self-contained PlusCal specification from invariants + OODA output.
+  \item \textbf{Translation \& model checking:} PlusCal $\rightarrow$ TLA+; TLC/Apalache verify invariants and temporal properties.
+  \item \textbf{Green-path collapse to living PRD:} when checks pass, produce a canonical \LaTeX{} PRD with traceability.
+  \item \textbf{Hierarchical prompt tree (A--B--C units):} generate a strict prompt hierarchy derived from the proven spec.
+\end{enumerate}
+
+\subsection{Sanity \& PR Layer (Optional External Gate)}
+
+This layer is a final quality gate before synthesis. It may include:
+\begin{itemize}
+  \item An optional external oracle critique (e.g., Grok via API) using redacted derived summaries only.
+  \item Automated PR drafting (e.g., IDE composer).
+  \item Traceability audits mapping diffs back to formal spec and invariants.
+\end{itemize}
+
+\textbf{Sovereignty boundary:} any external call is optional and explicitly non-sovereign.
+
+\subsection{One-Shot Synthesis \& Commit Layer}
+
+\begin{enumerate}[leftmargin=2em]
+  \item \textbf{One-shot code synthesis:} a local model reads the ABC prompt tree and generates complete code.
+  \item \textbf{Full verification execution:} run TDD suite; re-run TLC; optional lightweight critique.
+  \item \textbf{Signed auto-commit \& push:} if all checks are green, create a signed commit with traceability artifacts.
+\end{enumerate}
+
+% ============================================================
+\section{Recommended Full Local Stack (March 2026)}
+\label{sec:stack}
+
+\subsection{Design Goals and Non-Goals}
+
+\subsubsection{Goals}
+\begin{itemize}
+  \item \textbf{Local-first:} run primarily on owned hardware via open models and local servers.
+  \item \textbf{Auditable:} produce inspectable artifacts (specs, checks, proofs, traces, diffs).
+  \item \textbf{Composable:} swap inference engines, models, and tools via OpenAI-compatible endpoints where possible.
+  \item \textbf{Safety by construction:} isolate execution (containers/WASM), monitor behavior (eBPF/telemetry), require human sign-off.
+\end{itemize}
+
+\subsubsection{Non-Goals}
+\begin{itemize}
+  \item ``Perfect verification'': formal methods prove specific properties of specified models, not total correctness.
+  \item ``Free inference'': local inference eliminates per-token billing but has non-zero marginal cost (power, time, amortization).
+\end{itemize}
+
+\subsection{Inference Layer (Local, Swappable)}
+
+\begin{itemize}
+  \item \textbf{Ollama} --- pull-and-run ergonomics, model management, consistent local API endpoint.
+  \item \textbf{vLLM} --- high-throughput serving, batching, multi-GPU, OpenAI-compatible server.
+  \item \textbf{llama.cpp} --- maximal portability, aggressive GGUF quantization, OpenAI-compatible HTTP server.
+\end{itemize}
+
+\paragraph{Hardware realism.}
+Very large models (hundreds of billions of parameters) typically require multi-GPU workstations
+or heavy CPU offload for usable throughput; treat 480B/744B/1T-class models as workstation/mini-rack targets.
+
+\subsection{Model Set by Role}
+
+\subsubsection{Specification + deep code/repo reasoning (primary, heavy)}
+\begin{itemize}
+  \item \textbf{Qwen3-Coder-480B-A35B-Instruct} (Apache-2.0): repo-scale reasoning and spec-to-code workflows.
+  \item \textbf{Kimi K2.5} (Modified MIT): strong generalist; can be used for multimodal workflows where relevant.
+\end{itemize}
+
+\subsubsection{Agentic execution (tool use, long-horizon tasks)}
+\begin{itemize}
+  \item \textbf{GLM-5} (MIT): agentic-focused reasoning/coding.
+  \item \textbf{DeepSeek-V3.2} (MIT): long-context + agent performance.
+\end{itemize}
+
+\subsubsection{Small ``skill models'' (cheap, fast, local-everywhere)}
+Prefer distilled 7B--14B variants for linting, style transforms, unit test generation, small refactors,
+classification, routing, and retrieval summarization.
+
+\subsection{Orchestration and Multi-Agent Frameworks}
+
+\begin{itemize}
+  \item \textbf{LangGraph}: primary deterministic orchestration substrate (agents as graphs).
+  \item Optional role-team templates: \textbf{MetaGPT} and \textbf{ChatDev 2.0}.
+\end{itemize}
+
+\subsection{Coding Agents and IDE Surfaces}
+
+\begin{itemize}
+  \item \textbf{OpenHands} (formerly OpenDevin): autonomous SWE workflows; note that enterprise features may not be fully sovereign.
+  \item \textbf{Aider}: terminal pair-programmer supporting local Ollama and OpenAI-compatible endpoints.
+  \item \textbf{Continue}: IDE assistant, usable with local backends such as Ollama.
+\end{itemize}
+
+\subsection{Formal Methods Toolchain}
+
+\begin{itemize}
+  \item \textbf{TLA+ Toolbox} and \textbf{TLC}.
+  \item \textbf{Apalache}: symbolic model checking.
+  \item \textbf{Dafny}: verification-aware language/compiler.
+  \item \textbf{SMT solvers}: Z3 and cvc5.
+\end{itemize}
+
+\subsection{Memory and Knowledge Substrate}
+
+\begin{itemize}
+  \item \textbf{GraphRAG}: graph-based RAG pipeline with local quickstart.
+  \item \textbf{Letta} (formerly MemGPT): stateful agent memory with explicit memory management.
+\end{itemize}
+
+\subsection{Runtime Isolation and Observability}
+
+\begin{itemize}
+  \item \textbf{WebAssembly security model}: sandboxed modules.
+  \item \textbf{eBPF}: low-overhead kernel-level telemetry.
+  \item \textbf{Tauri}: local native desktop embedding (Rust backend).
+  \item \textbf{OpenTelemetry}: vendor-neutral observability standard.
+\end{itemize}
+
+\subsection{Optional External ``Sanity Oracle''}
+
+If you choose to call an external oracle model, treat it as outside the sovereignty boundary and use it only for critique/triangulation.
+
+% ============================================================
+\section{Canonical Component Table}
+
+\begin{longtable}{@{}p{0.11\textwidth}p{0.16\textwidth}p{0.26\textwidth}p{0.18\textwidth}p{0.12\textwidth}p{0.17\textwidth}@{}}
+\caption{Canonical Component Table (links, roles, licenses, suggested starts).}\label{tab:components}\\
+\toprule
+\textbf{Layer} & \textbf{Component} & \textbf{Canonical link} & \textbf{Primary role} & \textbf{License} & \textbf{Suggested install/start}\\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Layer} & \textbf{Component} & \textbf{Canonical link} & \textbf{Primary role} & \textbf{License} & \textbf{Suggested install/start}\\
+\midrule
+\endhead
+
+Inference & Ollama & \url{https://github.com/ollama/ollama} & Local model runner + local API endpoint & MIT & \texttt{ollama run <model>}\\
+Inference & vLLM & \url{https://github.com/vllm-project/vllm} & High-throughput serving + OpenAI-compat API & Apache-2.0 & \texttt{pip install vllm; vllm serve <model>}\\
+Inference & llama.cpp & \url{https://github.com/ggml-org/llama.cpp} & Low-level inference + GGUF + OpenAI-compat server & MIT & Build from source; run server\\
+Orchestration & LangGraph & \url{https://github.com/langchain-ai/langgraph} & Agent orchestration as graphs & MIT & \texttt{pip install -U langgraph}\\
+Multi-agent & MetaGPT & \url{https://github.com/FoundationAgents/MetaGPT} & Multi-role agent workflows & MIT & \texttt{pip install --upgrade metagpt}\\
+Multi-agent & ChatDev & \url{https://github.com/OpenBMB/ChatDev} & Multi-role ``software org'' template & Apache-2.0 & Follow repo instructions\\
+Coding agent & OpenHands & \url{https://github.com/OpenHands/OpenHands} & Autonomous SWE agent & MIT core & Follow docs\\
+Coding tool & Aider & \url{https://github.com/Aider-AI/aider} & Terminal pair-programmer & Apache-2.0 & \texttt{pip install aider-install}\\
+IDE assistant & Continue & \url{https://github.com/continuedev/continue} & IDE agent + checks & Apache-2.0 & Install extension; configure\\
+Formal & TLA+ & \url{https://github.com/tlaplus/tlaplus} & Spec + model checking & MIT & Install Toolbox; run TLC\\
+Formal & Apalache & \url{https://github.com/apalache-mc/apalache} & Symbolic model checking & Apache-2.0 & Install Java; run \texttt{apalache-mc}\\
+Formal & Dafny & \url{https://github.com/dafny-lang/dafny} & Verified programming + compilation & see repo & \texttt{dotnet tool install --global dafny}\\
+SMT & Z3 & \url{https://github.com/Z3Prover/z3} & SMT solver & MIT & binaries / bindings\\
+SMT & cvc5 & \url{https://github.com/cvc5/cvc5} & SMT solver & see docs & build / bindings\\
+Memory & GraphRAG & \url{https://github.com/microsoft/graphrag} & Graph-based RAG pipeline & MIT & \texttt{pip install graphrag}\\
+Memory & Letta & \url{https://github.com/letta-ai/letta} & Stateful memory for agents & Apache-2.0 & Run server (Docker/docs)\\
+Runtime & WebAssembly & \url{https://webassembly.org/docs/security/} & Sandbox execution model & N/A & Choose runtime\\
+Runtime/Obs & eBPF & \url{https://ebpf.io/what-is-ebpf/} & Kernel telemetry + safe extension & N/A & bpftool/bpftrace\\
+Runtime & Tauri & \url{https://github.com/tauri-apps/tauri} & Native desktop embedding & Apache-2.0/MIT & \texttt{npm create tauri-app@latest}\\
+Observability & OpenTelemetry & \url{https://opentelemetry.io/docs/} & Traces/metrics/logs standard & varies & Instrument + export OTLP\\
+\bottomrule
+\end{longtable}
+
+% ============================================================
+\section{Canonical Sovereign Loop (Mermaid Source)}
+
+The following diagram is provided as Mermaid source for rendering in Mermaid-compatible tools:
+
+\begin{lstlisting}[basicstyle=\ttfamily\small,frame=single]
+flowchart TD
+  A[Human intent + invariants] --> B[Spec & constraints]
+  B --> C[Formalize: TLA+/Dafny properties]
+  C --> D[Model check / SMT solve: TLC, Apalache, Z3/cvc5]
+  D --> E[Implementation plan (agents)]
+  E --> F[Agentic coding: OpenHands / Aider / Continue]
+  F --> G[Build + tests + CI checks]
+  G --> H[Package as ESC (local binary/app)]
+  H --> I[Runtime isolation: WASM / containers / Tauri embed]
+  I --> J[Observability: eBPF + OpenTelemetry traces]
+  J --> K[Memory update: GraphRAG + Letta]
+  K --> L{Optional external critique?}
+  L -->|Yes (non-sovereign)| M[xAI Grok via API]
+  L -->|No| N[Local-only]
+  M --> A
+  N --> A
+\end{lstlisting}
+
+% ============================================================
+\section{Changelog and Corrections (Curated)}
+
+\begin{itemize}
+  \item Treat external oracles as optional and outside the local trust boundary.
+  \item Prefer maintained project names (e.g., OpenHands vs.\ historical OpenDevin naming).
+  \item Require explicit hardware realism notes for extremely large parameter-count models.
+  \item Ensure every long-term memory item is source-linked, timestamped, and deletable.
+\end{itemize}
+
+% ============================================================
+\section{Appendix: Compilation Instructions}
+
+\subsection{Minimal build}
+
+This source is designed to compile with \texttt{xelatex}:
+
+\begin{lstlisting}[basicstyle=\ttfamily\small,frame=single]
+xelatex sovereign-desktop-superintelligence.tex
+xelatex sovereign-desktop-superintelligence.tex
+\end{lstlisting}
+
+Running twice ensures the table of contents and hyperlinks are resolved.
+
+\end{document}

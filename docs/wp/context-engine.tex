@@ -1,0 +1,576 @@
+% !TEX TS-program = XeLaTeX
+\documentclass[11pt]{article}
+\usepackage{url}
+% ----------------------------------------------------
+% Optimized Preamble
+% ----------------------------------------------------
+
+% Font and Unicode support
+\usepackage{fontspec}
+\usepackage{polyglossia}
+\setmainlanguage{english}
+
+% Micro-typography
+\usepackage{microtype}
+
+% Math packages
+\usepackage{amsmath,amssymb}
+\DeclareMathOperator{\cosine}{cosine}
+
+% Graphics and diagrams
+\usepackage{graphicx}
+\usepackage{tikz}
+
+% Algorithms
+\usepackage{algorithm}
+\usepackage{algorithmic}
+
+% Hyperlinks (if you need them)
+% \usepackage[hidelinks]{hyperref}
+
+% ----------------------------------------------------
+% Document Metadata
+% ----------------------------------------------------
+\title{The Context Engine for Opseeq:\\A Comprehensive Design for Large-Scale AI Solution Development}
+\author{Expert AI Professor}
+\date{Sunday, May 4, 2025}
+
+\begin{document}
+\maketitle
+
+% ----------------------------------------------------
+% Abstract
+% ----------------------------------------------------
+\begin{abstract}
+The Context Engine for Opseeq is a pivotal component in an AI-driven platform designed for prompt-driven, full-stack development of large-scale solutions. This whitepaper explores its architectural design, focusing on retaining complete context using graph and vector databases, optimization strategies for efficiency, and the mathematical foundations enabling contextual data analysis. Targeted at managing extensive project contexts, the engine integrates seamlessly with Opseeq’s orchestrator, prompt framework, and multi-agent systems, ensuring coherence and scalability. We detail its use of advanced algorithms like A* for graph traversal and Approximate Nearest Neighbor (ANN) search for vector similarity, alongside practical applications in planning, development, and documentation.
+\end{abstract}
+
+% ----------------------------------------------------
+% Section: Introduction
+% ----------------------------------------------------
+\section{Introduction}
+\label{sec:introduction}
+
+Opseeq is an innovative AI platform aimed at automating full-stack development through prompt sequences and multi-agent collaboration. Central to its functionality is the \emph{Context Engine}, a sophisticated module responsible for managing the shared project context, denoted as \( ctx \), within the project state \( s = (req, ctx, out) \). Here, \( req \) represents user requirements, \( ctx \) the accumulated context, and \( out \) the partial outputs. This engine ensures that all project information—ranging from initial requirements to intermediate decisions and final deliverables—remains organized, accessible, and actionable, even in large-scale AI projects.
+
+The design of the Context Engine addresses key challenges in AI solution development: retaining complete context, optimizing resource use for scalability, and providing mathematically robust mechanisms for data analysis. It leverages a hybrid approach combining graph databases for structural relationships and vector databases for semantic understanding, enhanced by techniques such as caching, lazy loading, and semantic search. This enables efficient handling of complex, interconnected data, making it an ideal backbone for Opseeq’s recursive problem-solving and collaborative workflows.
+
+This whitepaper provides a detailed exploration of the Context Engine’s architecture, algorithms, and integration within Opseeq. Section~\ref{sec:architecture} outlines its system architecture, followed by algorithmic strategies in Section~\ref{sec:algorithms}, mathematical foundations of vector databases in Section~\ref{sec:math}, optimization techniques in Section~\ref{sec:optimization}, integration details in Section~\ref{sec:integration}, use cases in Section~\ref{sec:usecases}, and future directions in Section~\ref{sec:future}. We conclude with a summary of its significance in Section~\ref{sec:conclusion}.
+
+% ----------------------------------------------------
+% Section: System Architecture
+% ----------------------------------------------------
+\section{System Architecture}
+\label{sec:architecture}
+
+The Context Engine is architecturally designed as a modular system consisting of three core components: the Context Store, the Research Module, and the Documentation Generator. These components collaborate seamlessly to retain complete project context, facilitate deep research, and automate documentation, thereby enabling Opseeq to manage large-scale AI solutions effectively.
+
+% ----------------------------------------------------
+% Subsection: Context Store
+% ----------------------------------------------------
+\subsection{Context Store}
+\label{subsec:context_store}
+
+The Context Store serves as the central repository for all project-related information, ensuring comprehensive context retention. It uses a hybrid database approach:
+
+\begin{itemize}
+  \item \textbf{Graph Database:} Implements a directed graph \(G = (N, E)\) (e.g., Neo4j) where nodes \(N\) represent entities (tasks, decisions, outputs) and edges \(E\) denote dependencies. For example, \( (n_i \rightarrow n_j) \) indicates task \(n_i\) depends on decision \(n_j\).
+  \item \textbf{Vector Database:} Stores high-dimensional embeddings (e.g., via Pinecone or FAISS) of textual data generated by models like BERT. This enables semantic search, retrieving context by meaning rather than exact keyword matches.
+  \item \textbf{Functionality:} Maintains project state \( s = (req, ctx, out) \), dynamically updating \(ctx\) with new nodes and embeddings as prompts execute and research findings are added.
+\end{itemize}
+
+% ----------------------------------------------------
+% Subsection: Research Module
+% ----------------------------------------------------
+\subsection{Research Module}
+\label{subsec:research_module}
+
+The Research Module enriches the Context Store by filling knowledge gaps through targeted data collection:
+
+\begin{itemize}
+  \item \textbf{Purpose:} Detects insufficient context (e.g., missing algorithm details) and issues research prompts (e.g., web searches or API queries).
+  \item \textbf{Workflow:} Executes prompt sequences like “Search best practices for time-series feature engineering,” processes results, and updates \(ctx\) with new nodes and embeddings.
+  \item \textbf{Integration:} Uses the Model Context Protocol (MCP) to access external resources, ensuring results seamlessly merge into the Context Store.
+\end{itemize}
+
+% ----------------------------------------------------
+% Subsection: Documentation Generator
+% ----------------------------------------------------
+\subsection{Documentation Generator}
+\label{subsec:documentation_generator}
+
+The Documentation Generator automates the creation of structured reports by traversing and formatting the stored context:
+
+\begin{itemize}
+  \item \textbf{Purpose:} Converts context—graph structures, prompt chains, validated outputs—into professional documents (LaTeX, Markdown).
+  \item \textbf{Process:} Extracts relevant subgraphs and embeddings, generates sections (e.g., system overview, code snippets), and compiles them into final reports.
+  \item \textbf{Output Types:} Produces technical whitepapers, user manuals, or case studies (e.g., a predictive maintenance report), ensuring consistency and completeness.
+\end{itemize}
+
+\begin{figure}[ht]
+  \centering
+  \begin{tikzpicture}[
+      node distance=2cm, auto,
+      box/.style={rectangle, rounded corners, draw=black, thick, minimum height=2em, minimum width=4em, align=center},
+      arrow/.style={thick, ->, >=stealth}]
+    
+    \node[box] (store) {Context Store};
+    \node[box, right of=store, xshift=3cm] (research) {Research Module};
+    \node[box, below of=store, yshift=-1.5cm] (doc) {Documentation\\Generator};
+    
+    \draw[arrow] (store) -- (research) node[midway, above] {Query};
+    \draw[arrow] (research) -- (store) node[midway, below] {Update};
+    \draw[arrow] (store) -- (doc) node[midway, left] {Extract};
+    \draw[arrow] (doc) -| ++(3,2) |- (store) node[midway, right] {Feedback};
+  \end{tikzpicture}
+  \caption{Context Engine Architecture: Interaction between Context Store, Research Module, and Documentation Generator.}
+  \label{fig:architecture}
+\end{figure}
+
+% ----------------------------------------------------
+% Section: Algorithmic Design for Context Retention
+% ----------------------------------------------------
+\section{Algorithmic Design for Context Retention}
+\label{sec:algorithms}
+
+The Context Engine employs specialized algorithms to ensure complete and efficient context retention. Leveraging both graph-based and vector-based approaches, integrated with state-machine workflows and dependency tracking, these algorithms enable Opseeq to manage complex AI projects with precision.
+
+% ----------------------------------------------------
+% Subsection: Graph-Based Context Representation
+% ----------------------------------------------------
+\subsection{Graph-Based Context Representation}
+\label{subsec:graph_context}
+
+Context is structured as a directed graph \(G = (N, E)\), where:
+
+\begin{itemize}
+  \item \(N\)\,: Entities such as tasks, decisions, research findings.
+  \item \(E\)\,: Directed edges denoting dependencies or relationships.
+\end{itemize}
+
+Key traversal methods include:
+
+\begin{itemize}
+  \item \textbf{Depth-First Search (DFS)}\.: Explores deep dependency chains.
+  \item \textbf{Breadth-First Search (BFS)}\.: Retrieves immediate neighbors efficiently.
+  \item \textbf{A* Search}\.: Uses a heuristic \(f(n)=g(n)+h(n)\) to optimize pathfinding for relevant context.
+\end{itemize}
+
+% ----------------------------------------------------
+% Subsection: Vector-Based Semantic Retention
+% ----------------------------------------------------
+\subsection{Vector-Based Semantic Retention}
+\label{subsec:vector_context}
+
+Unstructured data is embedded into \(\mathbb{R}^d\) using models like BERT:
+
+\[
+v = f(x; \theta), \quad x\in\text{Text},\; v\in\mathbb{R}^d
+\]
+
+Approximate Nearest Neighbor (ANN) search via HNSW graphs enables \(O(\log n)\) retrieval:
+
+\[
+\text{Top-K} = \arg\max_{v_i\in D} \frac{q\cdot v_i}{\|q\|\|v_i\|}
+\]
+
+% ----------------------------------------------------
+% Subsection: State Machine Integration
+% ----------------------------------------------------
+\subsection{State Machine Integration}
+\label{subsec:state_machine}
+
+The orchestrator drives state transitions \((h, s)\xrightarrow{p}(h', s')\). Each prompt output \(y_p\) updates the context:
+
+\[
+ctx' = ctx \cup \{y_p\},\quad out' = out \cup \{y_p\}
+\]
+
+This additive model ensures no context loss across states.
+
+% ----------------------------------------------------
+% Subsection: Intuition Graph for Dependency Tracking
+% ----------------------------------------------------
+\subsection{Intuition Graph for Dependency Tracking}
+\label{subsec:intuition_graph}
+
+The intuition graph tracks sub-task dependencies:
+
+\[
+G' = G \cup \{n_{y_p}, (n_i\!\rightarrow\!n_{y_p})\,|\,n_i\in\text{Prereqs}(y_p)\}
+\]
+
+Algorithms include Dijkstra’s for shortest-path critical dependency detection and topological sort for execution ordering.
+
+% ----------------------------------------------------
+% Section: Mathematical Foundations of Vectorized Databases
+% ----------------------------------------------------
+\section{Mathematical Foundations of Vectorized Databases}
+\label{sec:math}
+
+Vector databases form the semantic core of the Context Engine, enabling meaning-based context retrieval and analysis. This section details vector embeddings, similarity metrics, and their application in contextual data operations.
+
+% ----------------------------------------------------
+% Subsection: Vector Embeddings
+% ----------------------------------------------------
+\subsection{Vector Embeddings}
+\label{subsec:embeddings}
+
+Vector embeddings map unstructured data \(x\) into a high-dimensional space \(\mathbb{R}^d\):
+
+\[
+v = f(x; \theta)
+\]
+
+where:
+\begin{itemize}
+  \item \(f\)\,: A neural embedding function (e.g., BERT) parameterized by \(\theta\).
+  \item \(x\in X\)\,: Input data (text, metadata).
+  \item \(v\in\mathbb{R}^d\)\,: Resulting vector preserving semantic proximity.
+\end{itemize}
+
+Embedding properties:
+\[
+\text{distance}(v_i, v_j)\approx\text{semantic\_distance}(x_i,x_j)
+\]
+
+% ----------------------------------------------------
+% Subsection: Similarity Search
+% ----------------------------------------------------
+\subsection{Similarity Search}
+\label{subsec:similarity_search}
+
+Retrieval of top-K similar vectors uses metrics:
+
+\begin{itemize}
+  \item \textbf{Cosine Similarity:}
+    \[
+    \cos(a,b) = \frac{a \cdot b}{\|a\|\|b\|}
+    \]
+  \item \textbf{Euclidean Distance:}
+    \[
+    d(a,b) = \sqrt{\sum_{i=1}^d (a_i - b_i)^2}
+    \]
+\end{itemize}
+
+ANN search via HNSW yields \(O(\log n)\) performance for large \(n\):
+
+\[
+\text{Top-K} = \arg\max_{v_i\in D}\cos(q,v_i)
+\]
+
+% ----------------------------------------------------
+% Subsection: Contextual Data Analysis
+% ----------------------------------------------------
+\subsection{Contextual Data Analysis}
+\label{subsec:context_analysis}
+
+Combining graph and vector contexts:
+
+\[
+ctx_q = \text{RetrieveContext}(q) = \underbrace{\text{Cypher}(G,q)}_{\text{structural}} \;\cup\; \underbrace{\text{HNSW\_TopK}(q,D)}_{\text{semantic}}
+\]
+
+Threshold-based filtering:
+
+\[
+\{v_i : \cos(q,v_i) > \tau\}
+\]
+
+This unified retrieval ensures both relational and semantic relevance.
+
+% ----------------------------------------------------
+% Section: Optimization for Large-Scale Projects
+% ----------------------------------------------------
+\section{Optimization for Large-Scale Projects}
+\label{sec:optimization}
+
+To support extensive AI initiatives, the Context Engine incorporates advanced optimization strategies—memory management, search performance, and concurrency control—that ensure scalability, efficiency, and robustness.
+
+% ----------------------------------------------------
+% Subsection: Memory Optimization
+% ----------------------------------------------------
+\subsection{Memory Optimization}
+\label{subsec:memory_optimization}
+
+Efficient memory use is achieved through:
+
+\begin{itemize}
+  \item \textbf{LRU Caching:} Retains frequently accessed context with eviction based on usage:
+    \[
+      \mathrm{Cache}(ctx) = \mathrm{LRU}(\mathrm{frequency},\mathrm{capacity}).
+    \]
+  \item \textbf{Lazy Loading:} Loads only relevant subgraphs/nodes on demand:
+    \[
+      \mathrm{Load}(ctx_q) = \{n \in N \mid \mathrm{relevant}(n,q)\}.
+    \]
+  \item \textbf{Context Pruning:} Periodic removal of low-value nodes via relevance score \(r(n)\):
+    \[
+      r(n) = w_1\,\mathrm{freq}(n) + w_2\,\mathrm{age}(n) + w_3\,\mathrm{deg}(n).
+    \]
+  \item \textbf{Partitioning:} Distributes graph across shards for very large datasets:
+    \[
+      \mathrm{Partition}(G)=\{G_i\}\quad \bigcup G_i=G,\ G_i\cap G_j=\emptyset.
+    \]
+\end{itemize}
+
+% ----------------------------------------------------
+% Subsection: Search Optimization
+% ----------------------------------------------------
+\subsection{Search Optimization}
+\label{subsec:search_optimization}
+
+Rapid, accurate retrieval is ensured by:
+
+\begin{itemize}
+  \item \textbf{Graph Queries:} A* for shortest paths:
+    \[
+      f(n)=g(n)+h(n).
+    \]
+  \item \textbf{Semantic ANN:} HNSW top-K search in \(O(\log n)\):
+    \[
+      \mathrm{Top\text{-}K} = \arg\max_{v_i\in D}\cos(q,v_i).
+    \]
+  \item \textbf{Hybrid Search:} Union of structural and semantic results:
+    \[
+      ctx_q = \mathrm{Cypher}(G,q)\,\cup\,\mathrm{HNSW\_TopK}(q,D).
+    \]
+  \item \textbf{Indexing \& Caching:} Pre-index nodes/embeddings and cache frequent queries.
+\end{itemize}
+
+% ----------------------------------------------------
+% Subsection: Concurrency Control
+% ----------------------------------------------------
+\subsection{Concurrency Control}
+\label{subsec:concurrency_control}
+
+Ensuring data integrity under multi-agent access:
+
+\begin{itemize}
+  \item \textbf{Optimistic Concurrency:} Version checks before commit:
+    \[
+      \mathrm{Commit}(ctx',v)=
+      \begin{cases}
+        ctx' & v=\text{current\_version}\\
+        \text{reject} & \text{otherwise}.
+      \end{cases}
+    \]
+  \item \textbf{Fine-Grained Locking:} Lock individual nodes/edges for critical updates.
+  \item \textbf{Versioned Snapshots:} Maintain historical graph versions \(G_t\) for consistent reads.
+\end{itemize}
+
+% ----------------------------------------------------
+% Section: Integration with Opseeq Framework
+% ----------------------------------------------------
+\section{Integration with Opseeq Framework}
+\label{sec:integration}
+
+The Context Engine is deeply integrated with Opseeq’s orchestrator, prompt framework, and multi-agent collaboration system, ensuring consistent context availability and updates throughout all development phases.
+
+% ----------------------------------------------------
+% Subsection: Orchestrator
+% ----------------------------------------------------
+\subsection{Orchestrator}
+\label{subsec:orchestrator}
+
+Opseeq’s orchestrator manages prompt sequences and state transitions \((h, s)\xrightarrow{p}(h', s')\). The Context Engine:
+
+\begin{itemize}
+  \item Provides the latest project state \(ctx\) for decision-making.
+  \item Records each prompt output \(y_p\) by updating \(ctx\gets ctx\cup\{y_p\}\).
+  \item Supports policy functions \(\mu: S\rightarrow P\) by supplying historical prompt chains and context similarities.
+\end{itemize}
+
+% ----------------------------------------------------
+% Subsection: Prompt Framework
+% ----------------------------------------------------
+\subsection{Prompt Framework}
+\label{subsec:prompt_framework}
+
+Prompt modules \(p: X\rightarrow Y_p\) receive enriched context \(X\) from the Context Engine:
+
+\[
+  X = \mathrm{RetrieveContext}(q_p, G, D),
+\]
+
+and on completion, their outputs update both graph and vector stores:
+
+\[
+  ctx'\!=\!ctx\cup\{y_p\},\quad D'\!=\!D\cup\{v_{y_p}\}.
+\]
+
+% ----------------------------------------------------
+% Subsection: Multi-Agent Collaboration
+% ----------------------------------------------------
+\subsection{Multi-Agent Collaboration}
+\label{subsec:multi_agent}
+
+Specialized agents (e.g., UI, backend, documentation agents) share a unified context via:
+
+\begin{itemize}
+  \item A common intuition graph \(G\) for dependency coordination.
+  \item API endpoints for context queries \(\mathrm{RetrieveContext}(q, G, D)\).
+  \item Incremental updates to \(G\) and \(D\), ensuring all agents operate on the latest context.
+\end{itemize}
+
+
+% ----------------------------------------------------
+% Section: Use Cases
+% ----------------------------------------------------
+\section{Use Cases}
+\label{sec:usecases}
+
+The Context Engine’s flexibility makes it invaluable across diverse scenarios. Below is a detailed predictive maintenance example, followed by its broader applications within Opseeq.
+
+% ----------------------------------------------------
+% Subsection: Predictive Maintenance Algorithm
+% ----------------------------------------------------
+\subsection{Predictive Maintenance Algorithm}
+\label{subsec:predictive_maintenance}
+
+A project to predict equipment failures using time-series sensor data:
+
+\begin{itemize}
+  \item \textbf{Initialization:}  
+    User requirement \(req_0\): “Predict failures within 48 hours.”  
+    Store \(req_0\) in graph \(G\) and vectorize \(v_{req_0}\).
+
+  \item \textbf{Planning:}  
+    Research Module issues:  
+    “Search best time-series feature engineering.”  
+    Retrieved embeddings \(ctx_v\) and stored new graph node \(n_{\mathrm{research}}\).
+  
+  \item \textbf{Implementation:}  
+    Prompt to generate feature-engineering script uses  
+    \(\mathrm{RetrieveContext}(q,G,D)\).  
+    Output \(y_{\mathrm{script}}\) validated and stored.
+
+  \item \textbf{Documentation:}  
+    Documentation Generator compiles context into a LaTeX case study, visualizing the intuition graph.
+\end{itemize}
+
+% ----------------------------------------------------
+% Subsection: Broader Applications
+% ----------------------------------------------------
+\subsection{Broader Applications}
+\label{subsec:broader_applications}
+
+Beyond specialized cases, the Context Engine underpins:
+
+\begin{itemize}
+  \item \textbf{Prompt Execution:} Supplies context per module for coherent outputs.  
+  \item \textbf{Recursive Problem-Solving:} Tracks sub-task decomposition in the intuition graph.  
+  \item \textbf{Documentation:} Automates report generation at milestones.  
+  \item \textbf{Agent Coordination:} Aligns multi-agent workflows via shared context.
+\end{itemize}
+
+% ----------------------------------------------------
+% Section: Conclusion
+% ----------------------------------------------------
+\section{Future Directions}
+\label{sec:future}
+% (Add your content here)
+
+\section{Conclusion}
+\label{sec:conclusion}
+
+The Context Engine is a foundational component of Opseeq, enabling comprehensive context retention and efficient AI-driven workflows. By integrating graph and vector databases, advanced algorithms, and robust optimization strategies, it supports complex, large-scale projects with precision and scalability. Its seamless integration with Opseeq’s orchestrator, prompt framework, and multi-agent system ensures that every project phase benefits from complete, up-to-date context. Future enhancements—such as formal verification, self-improving prompts, user studies, and further scalability improvements—will continue to solidify its role as a critical enabler of AI-assisted software development.
+
+\appendix
+
+\section{Glossary}
+\label{app:glossary}
+
+\begin{itemize}
+  \item \textbf{Context Engine}: The core module in Opseeq responsible for managing the entire project context, including retention, research, and documentation, by leveraging graph and vector databases.
+  \item \textbf{Context Store}: The hybrid repository (graph + vector database) that stores both structural (nodes\,/\,edges) and semantic (embeddings) project data.
+  \item \textbf{Intuition Graph}: A directed graph \(G=(N,E)\) within the Context Store that captures task dependencies and reasoning chains.
+  \item \textbf{Orchestrator}: Opseeq’s central controller, modeled as a state machine, that sequences prompt modules and state transitions.
+  \item \textbf{Prompt Framework}: The library of modular prompt sequences \(p\colon X \to Y_p\) that generate outputs based on supplied context \(X\).
+  \item \textbf{Semantic Search}: Retrieval based on vector embeddings and Approximate Nearest Neighbor (ANN) methods, rather than exact keyword matches.
+  \item \textbf{Vector Database}: A system (e.g., FAISS, Pinecone) that stores high-dimensional embeddings and supports efficient similarity search.
+\end{itemize}
+
+\section{Summary of Notations}
+\label{app:notations}
+
+\begin{itemize}
+  \item \(s = (req, ctx, out)\): Project state  
+    \begin{itemize}
+      \item \(req\): User requirements  
+      \item \(ctx\): Accumulated context  
+      \item \(out\): Partial outputs
+    \end{itemize}
+  \item \(G = (N, E)\): Directed graph (Context Store or intuition graph)  
+    \begin{itemize}
+      \item \(N\): Set of nodes (entities)  
+      \item \(E\): Set of edges (relationships)
+    \end{itemize}
+  \item \(p \colon X \to Y_p\): Prompt module mapping input \(X\) to output \(Y_p\)
+  \item \(\mu \colon S \to P\): Orchestrator policy function selecting next prompt module
+  \item \(v = f(x;\theta)\): Embedding function (e.g., BERT) mapping data \(x\) to \(\mathbb{R}^d\)
+  \item \(\displaystyle \cosine(a,b) = \frac{a \cdot b}{\|a\|\|b\|}\): Cosine similarity metric
+  \item \(\displaystyle \mathrm{Top\text{-}K} = \arg\max_{v_i\in D} \cosine(q,v_i)\): ANN retrieval of top-K vectors
+  \item \(f(n)=g(n)+h(n)\): A\* search cost function  
+    \begin{itemize}
+      \item \(g(n)\): Cost so far  
+      \item \(h(n)\): Heuristic estimate to goal
+    \end{itemize}
+\end{itemize}
+
+\section{References}
+\label{app:references}
+
+\begin{thebibliography}{9}
+
+\bibitem{opseeq_research}
+Chaotic Beauty R\&D Division,  
+``Opseeq: A Prompt-Driven Full-Stack Development Framework,''  
+May 2025.
+
+\bibitem{opseeq_planning}
+Chaotic Beauty R\&D Division,  
+``Opseeq: Modular Prompt Architecture for Full-Stack and Creative Systems Deployment,''  
+2025.
+
+\bibitem{vector_databases}
+Pinecone,  
+``What is a Vector Database?,''  
+\url{https://www.pinecone.io/learn/vector-databases/}, accessed May 2025.
+
+\bibitem{graph_databases}
+Neo4j,  
+``Graph Database Developer Guide,''  
+\url{https://neo4j.com/developer/graph-database/}, accessed May 2025.
+
+\bibitem{hnsw}
+Y.\,A. Malkov and D.\,A. Yashunin,  
+``Efficient and Robust Approximate Nearest Neighbor Search Using Hierarchical Navigable Small World Graphs,''  
+\emph{IEEE Trans. Pattern Anal. Mach. Intell.}, vol.~42, no.~4, pp.~824–836, 2020.
+
+\bibitem{bert}
+J. Devlin, M.-W. Chang, K. Lee, and K. Toutanova,  
+``BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding,''  
+\emph{Proc. NAACL-HLT}, pp.~4171–4186, 2019.
+
+\bibitem{janusgraph}
+JanusGraph,  
+``Distributed Graph Database,''  
+\url{https://janusgraph.org/}, accessed May 2025.
+
+\bibitem{lru}
+E.\,J. O’Neil, P.\,E. O’Neil, and G. Weikum,  
+``The LRU-K Page Replacement Algorithm for Database Disk Buffering,''  
+\emph{ACM SIGMOD Record}, vol.~22, no.~2, pp.~297–306, 1993.
+
+\bibitem{a_star}
+P.\,E. Hart, N.\,J. Nilsson, and B. Raphael,  
+``A Formal Basis for the Heuristic Determination of Minimum Cost Paths,''  
+\emph{IEEE Trans. Syst. Sci. Cybern.}, vol.~4, no.~2, pp.~100–107, 1968.
+
+\end{thebibliography}
+
+
+\end{document}
+
+

@@ -1,0 +1,7 @@
+{
+  "name": "@rivet-dev/agent-os-fd",
+  "type": "wasm",
+  "description": "fd fast file finder",
+  "aptName": "fd-find",
+  "source": "rust"
+}

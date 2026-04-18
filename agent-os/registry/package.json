@@ -1,0 +1,26 @@
+{
+  "name": "agent-os-registry",
+  "private": true,
+  "type": "module",
+  "license": "Apache-2.0",
+  "version": "0.0.0",
+  "packageManager": "pnpm@10.13.1",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "pnpm -r run build",
+    "check-types": "pnpm -r run check-types",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@secure-exec/core": "^0.2.1",
+    "@secure-exec/nodejs": "^0.2.1",
+    "@rivet-dev/agent-os-python": "link:../packages/python",
+    "@rivet-dev/agent-os-posix": "link:../packages/posix",
+    "@types/node": "^22.10.2",
+    "secure-exec": "^0.2.1",
+    "typescript": "^5.9.2",
+    "vitest": "^2.1.8"
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "name": "@rivet-dev/agent-os-tree",
+  "type": "wasm",
+  "description": "tree directory listing",
+  "aptName": "tree",
+  "source": "rust"
+}

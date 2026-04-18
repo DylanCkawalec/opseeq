@@ -1,0 +1,7 @@
+{
+  "name": "@rivet-dev/agent-os-curl",
+  "type": "wasm",
+  "description": "curl HTTP client",
+  "aptName": "curl",
+  "source": "c"
+}

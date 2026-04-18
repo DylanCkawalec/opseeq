@@ -7,12 +7,12 @@ coverage/
 dist/
 docs/_build/
 node_modules/
-
+corethink-claw.tex
+opseeq-architecture.png
 # OS metadata
 .DS_Store
 desktop.ini
 Thumbs.db
-
 # Project-specific
 draft_newsletter_*
 research/
@@ -45,4 +45,55 @@ secrets.json
 secrets.yaml
 service-account*.json
 token.json
+
+# ── Non-production: test output, tooling caches, local scratch ───────────────
+# Test runners & machine-generated reports (Vitest, Playwright, Jest, NYC)
+test-results/
+playwright-report/
+playwright/.cache/
+.vitest/
+vitest-results.xml
+junit.xml
+*.lcov
+.nyc_output/
+/reports/
+allure-results/
+allure-report/
+__screenshots__/
+
+# Tooling caches (reproducible from source; not shipped)
+.eslintcache
+.prettiercache
+.stylelintcache
+.turbo/
+.parcel-cache/
+.cache/
+.vite/
+vite.config.*.timestamp-*
+
+# Package manager debug logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# LaTeX / compiler logs (not source)
+docs/**/*.log
+
+# Local scratch, editor swapfiles (repo root only)
+/tmp/
+/temp/
+*.tmp
+*.swp
+*.swo
+*~
+/*.log
+
+# Session / conversation logs (local-only; see session-logger skill)
+sessions/
+
+# IDE local state (team may commit .vscode/)
+.idea/
+
 engine/target/

@@ -1,0 +1,7 @@
+{
+  "name": "@rivet-dev/agent-os-zip",
+  "type": "wasm",
+  "description": "zip archive creation",
+  "aptName": "zip",
+  "source": "c"
+}

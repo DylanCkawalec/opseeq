@@ -1,0 +1,39 @@
+# Turborepo
+**/.turbo
+
+# Node.js and pnpm
+node_modules/
+npm-debug.log*
+pnpm-debug.log*
+.pnpm-store/
+
+# TypeScript
+*.tsbuildinfo
+dist/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Secrets
+secrets/**/*
+
+# Registry build artifacts
+registry/native/target/
+registry/native/vendor/
+registry/native/c/build/
+registry/native/c/vendor/
+registry/native/c/libs/
+registry/native/c/.cache/
+registry/native/c/sysroot/
+registry/software/*/wasm/
+registry/software/*/agent-os-package.meta.json
+registry/.last-publish-hash
+registry/software/*/.last-publish-hash
+registry/.build-markers/

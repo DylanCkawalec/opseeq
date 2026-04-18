@@ -1,0 +1,68 @@
+--- a/src/chmod.rs
++++ b/src/chmod.rs
+@@ -8,16 +8,51 @@
+ use clap::{Arg, ArgAction, Command};
+ use std::ffi::OsString;
+ use std::fs;
++#[cfg(unix)]
+ use std::os::unix::fs::{MetadataExt, PermissionsExt};
+ use std::path::{Path, PathBuf};
+ use thiserror::Error;
+ use uucore::display::Quotable;
+ use uucore::error::{ExitCode, UError, UResult, USimpleError, UUsageError, set_exit_code};
+ use uucore::fs::display_permissions_unix;
++#[cfg(unix)]
+ use uucore::libc::mode_t;
++#[cfg(target_os = "wasi")]
++use uucore::fs::mode_t;
+ use uucore::mode;
+ use uucore::perms::{TraverseSymlinks, configure_symlink_and_recursion};
+
++// wasmVM: WASI compatibility — MetadataExt lacks mode(), Permissions lacks from_mode()
++#[cfg(target_os = "wasi")]
++mod wasi_compat {
++    use std::fs;
++
++    /// Extension trait to provide mode() on WASI Metadata.
++    pub trait MetadataMode {
++        fn mode(&self) -> u32;
++    }
++    impl MetadataMode for fs::Metadata {
++        fn mode(&self) -> u32 {
++            let ft = self.file_type();
++            let base = if ft.is_dir() { 0o755 } else { 0o644 };
++            if self.permissions().readonly() {
++                base & !0o222
++            } else {
++                base
++            }
++        }
++    }
++
++    /// Set POSIX-style permissions on a file (best-effort on WASI).
++    pub fn set_permissions_from_mode(path: &std::path::Path, mode: u32) -> std::io::Result<()> {
++        let mut perms = path.metadata()?.permissions();
++        perms.set_readonly(mode & 0o200 == 0);
++        fs::set_permissions(path, perms)
++    }
++}
++#[cfg(target_os = "wasi")]
++use wasi_compat::MetadataMode;
++
+ #[cfg(all(unix, not(target_os = "redox")))]
+ use uucore::safe_traversal::{DirFd, SymlinkBehavior};
+ use uucore::{format_usage, show, show_error};
+@@ -683,7 +718,12 @@
+             // Use the helper method for consistent reporting
+             self.report_permission_change(file, fperm, mode);
+             Ok(())
+-        } else if let Err(err) = fs::set_permissions(file, fs::Permissions::from_mode(mode)) {
++        } else if let Err(err) = {
++            #[cfg(unix)]
++            { fs::set_permissions(file, fs::Permissions::from_mode(mode)) }
++            #[cfg(target_os = "wasi")]
++            { wasi_compat::set_permissions_from_mode(file, mode) }
++        } {
+             if !self.quiet {
+                 show_error!("{err}");
+             }

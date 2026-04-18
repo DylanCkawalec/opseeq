@@ -1,0 +1,7 @@
+{
+  "name": "@rivet-dev/agent-os-sed",
+  "type": "wasm",
+  "description": "GNU sed stream editor",
+  "aptName": "sed",
+  "source": "rust"
+}

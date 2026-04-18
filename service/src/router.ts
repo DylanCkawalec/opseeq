@@ -1,33 +1,34 @@
+/**
+ * @module router — Inference gateway (kernel-first, Node fallback)
+ *
+ * **Axiom A1 — OpenAI-shaped surface** — Request/response types remain compatible with OpenAI Chat
+ * Completions for agent clients; provider-specific translation stays internal.
+ * **Axiom A2 — Kernel precedence** — When `KernelClient.isReady()`, `inference.route` is invoked
+ * before any Node HTTP provider branch.
+ * **Postulate P1 — Provider resolution** — Delegates to `provider-resolution` for O(1) exact match and
+ * first-match prefix rules identical to historical nested loops.
+ * **Postulate P2 — Streaming parity** — OpenAI-compat streams use `fetchStreamWithRetry` with the same
+ * retry policy as non-streaming JSON calls.
+ * **Corollary C1 — Anthropic/Ollama** — Non-OpenAI paths use dedicated HTTP shapes; streaming is
+ * rejected for those providers (legacy error text preserved).
+ * **Lemma L1 — Observability** — Successful Node routes call `recordSuccess` / `recordArtifact`;
+ * kernel paths record using kernel-reported provider or `kernel`.
+ * **Behavioral contract** — `routeInference` and `routeInferenceStream` throw the same error types
+ * and messages as v5.0 for missing providers or unsupported stream.
+ * **Tracing invariant** — `traceId` is forwarded to the kernel RPC when present; Node paths omit it
+ * from upstream HTTP but may attach via `_opseeq` latency metadata.
+ */
 import type { ProviderConfig, ServiceConfig } from './config.js';
 import type { KernelClient } from './kernel.js';
+import { recordSuccess, recordArtifact } from './feedback.js';
+import { fetchWithRetry, fetchStreamWithRetry } from './http-fetch-retry.js';
+import { resolveProviderFor, getRoutingTable } from './provider-resolution.js';
+import { getKeepAliveForModel, recordModelUse } from './model-residency.js';
 
 let _kernel: KernelClient | null = null;
 
 export function setKernel(k: KernelClient): void {
   _kernel = k;
-}
-
-async function fetchWithRetry(
-  url: string,
-  init: RequestInit,
-  retries = 2,
-  baseDelay = 500,
-): Promise<Response> {
-  let lastErr: Error | undefined;
-  for (let attempt = 0; attempt <= retries; attempt++) {
-    try {
-      const res = await fetch(url, init);
-      if (res.status >= 500 && attempt < retries) {
-        await new Promise(r => setTimeout(r, baseDelay * 2 ** attempt));
-        continue;
-      }
-      return res;
-    } catch (err) {
-      lastErr = err instanceof Error ? err : new Error(String(err));
-      if (attempt < retries) await new Promise(r => setTimeout(r, baseDelay * 2 ** attempt));
-    }
-  }
-  throw lastErr ?? new Error('fetch failed after retries');
 }
 
 export interface ChatMessage {
@@ -73,16 +74,7 @@ export interface ChatCompletionResponse {
 }
 
 function resolveProvider(model: string, config: ServiceConfig): ProviderConfig | null {
-  for (const provider of config.providers) {
-    if (provider.models.includes(model)) return provider;
-  }
-
-  for (const provider of config.providers) {
-    if (provider.models.some(m => model.startsWith(m.split('/')[0] + '/'))) return provider;
-  }
-
-  if (config.providers.length > 0) return config.providers[0];
-  return null;
+  return resolveProviderFor(model, config);
 }
 
 function isAnthropicProvider(provider: ProviderConfig): boolean {
@@ -147,6 +139,7 @@ async function callOllamaProvider(
   provider: ProviderConfig,
   req: ChatCompletionRequest,
 ): Promise<ChatCompletionResponse> {
+  const keepAlive = getKeepAliveForModel(req.model);
   const res = await fetchWithRetry(`${provider.baseUrl}/api/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -155,6 +148,7 @@ async function callOllamaProvider(
       stream: false,
       messages: req.messages,
       options: { temperature: req.temperature ?? 0 },
+      keep_alive: keepAlive,
     }),
   });
 
@@ -166,7 +160,7 @@ async function callOllamaProvider(
   const data = await res.json() as { model?: string; message?: { content: string; thinking?: string; role?: string }; eval_count?: number; prompt_eval_count?: number };
 
   const msg: ChatMessage = { role: 'assistant', content: data.message?.content || '' };
-  if (data.message?.thinking) Object.assign(msg, { reasoning: data.message.thinking });
+  if (data.message?.thinking) (msg as unknown as Record<string, unknown>).reasoning = data.message.thinking;
 
   return {
     id: `chatcmpl-${Date.now()}`,
@@ -191,6 +185,8 @@ async function callOpenAICompatible(
   req: ChatCompletionRequest,
 ): Promise<ChatCompletionResponse> {
   const body: Record<string, unknown> = { ...req, stream: false };
+  // CoreThink API rejects the 'stream' property entirely
+  if (provider.name === 'corethink') delete body.stream;
 
   const res = await fetchWithRetry(`${provider.baseUrl}/chat/completions`, {
     method: 'POST',
@@ -215,7 +211,7 @@ async function callOpenAICompatibleStream(
 ): Promise<ReadableStream<Uint8Array>> {
   const body: Record<string, unknown> = { ...req, stream: true };
 
-  const res = await fetch(`${provider.baseUrl}/chat/completions`, {
+  const res = await fetchStreamWithRetry(`${provider.baseUrl}/chat/completions`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -239,6 +235,7 @@ export async function routeInference(
   traceId?: string,
 ): Promise<ChatCompletionResponse> {
   if (_kernel?.isReady()) {
+    const kernelStart = Date.now();
     try {
       const result = await _kernel.call('inference.route', {
         model: req.model,
@@ -247,7 +244,26 @@ export async function routeInference(
         max_tokens: req.max_tokens || req.max_completion_tokens,
         stream: false,
         trace_id: traceId,
+        purpose: (req as Record<string, unknown>).purpose,
       }) as ChatCompletionResponse;
+
+      const latencyMs = Date.now() - kernelStart;
+      const provider = result._opseeq?.provider || 'kernel';
+      recordSuccess(provider, latencyMs, result.usage ? {
+        prompt_tokens: result.usage.prompt_tokens,
+        completion_tokens: result.usage.completion_tokens,
+      } : undefined);
+      recordArtifact({
+        id: result.id || `k-${Date.now()}`,
+        model: result.model || req.model,
+        provider,
+        latencyMs,
+        tokens: result.usage ? { input: result.usage.prompt_tokens, output: result.usage.completion_tokens } : null,
+        success: true,
+        timestamp: new Date().toISOString(),
+        traceId: traceId || null,
+      });
+
       return result;
     } catch (err) {
       console.log(`[kernel] inference.route failed, falling back to Node: ${err instanceof Error ? err.message : err}`);
@@ -266,6 +282,7 @@ export async function routeInference(
     response = await callAnthropicProvider(provider, req);
   } else if (isOllamaProvider(provider)) {
     response = await callOllamaProvider(provider, req);
+    recordModelUse(req.model);
   } else {
     response = await callOpenAICompatible(provider, req);
   }
@@ -300,11 +317,5 @@ export async function listModels(config: ServiceConfig): Promise<{ id: string; p
     } catch { /* fall through */ }
   }
 
-  const models: { id: string; provider: string }[] = [];
-  for (const provider of config.providers) {
-    for (const model of provider.models) {
-      models.push({ id: model, provider: provider.name });
-    }
-  }
-  return models;
+  return getRoutingTable(config).modelListFlat;
 }

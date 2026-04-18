@@ -1,0 +1,22 @@
+packages:
+  - packages/*
+  - examples/*
+  - registry/software/*
+  - registry/agent/*
+  - registry/file-system/*
+  - registry/tool/*
+
+ignoredBuiltDependencies:
+  - '@clerk/shared'
+  - '@parcel/watcher'
+  - browser-tabs-lock
+  - core-js
+
+onlyBuiltDependencies:
+  - '@biomejs/biome'
+  - opencode-ai
+  - better-sqlite3
+  - cbor-extract
+  - esbuild
+  - lefthook
+  - sharp

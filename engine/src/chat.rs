@@ -5,7 +5,7 @@ use crate::router;
 use crate::types::{ChatMessage, ChatRequest};
 use rustyline::DefaultEditor;
 
-const VERSION: &str = "0.1.0";
+const VERSION: &str = "5.0.0";
 
 pub async fn run_chat(config: KernelConfig) {
     let client = reqwest::Client::builder()
@@ -196,24 +196,35 @@ async fn handle_slash(
 
             match subcmd {
                 "" => {
-                    let r = probe::probe_mermate(client, &config.mermate_url).await;
-                    println!("  Mermate: {} ({}ms)", if r.reachable { "online" } else { "offline" }, r.latency_ms);
-                    if r.reachable {
-                        let agents_url = format!("{}/api/agents", config.mermate_url);
-                        if let Ok(resp) = client.get(&agents_url).timeout(std::time::Duration::from_secs(3)).send().await {
-                            if let Ok(data) = resp.json::<serde_json::Value>().await {
-                                let count = data["agents"].as_array().map(|a| a.len()).unwrap_or(0);
-                                println!("  Agents:  {count} loaded");
-                            }
+                    let agents_url = format!("{}/api/agents", config.mermate_url);
+                    let tla_url = format!("{}/api/render/tla/status", config.mermate_url);
+                    let ts_url = format!("{}/api/render/ts/status", config.mermate_url);
+                    let timeout = std::time::Duration::from_secs(3);
+
+                    async fn fetch_json(client: &reqwest::Client, url: &str, timeout: std::time::Duration) -> Option<serde_json::Value> {
+                        client.get(url).timeout(timeout).send().await.ok()?.json::<serde_json::Value>().await.ok()
+                    }
+
+                    let (health, agents, tla, ts) = tokio::join!(
+                        probe::probe_mermate(client, &config.mermate_url),
+                        fetch_json(client, &agents_url, timeout),
+                        fetch_json(client, &tla_url, timeout),
+                        fetch_json(client, &ts_url, timeout),
+                    );
+
+                    println!("  Mermate: {} ({}ms)", if health.reachable { "online" } else { "offline" }, health.latency_ms);
+                    if health.reachable {
+                        if let Some(data) = agents {
+                            let count = data["agents"].as_array().map(|a| a.len()).unwrap_or(0);
+                            println!("  Agents:  {count} loaded");
                         }
-                        for (label, path) in [("TLA+", "/api/render/tla/status"), ("TS", "/api/render/ts/status")] {
-                            let url = format!("{}{}", config.mermate_url, path);
-                            if let Ok(resp) = client.get(&url).timeout(std::time::Duration::from_secs(2)).send().await {
-                                if let Ok(data) = resp.json::<serde_json::Value>().await {
-                                    let avail = data["available"].as_bool().unwrap_or(false);
-                                    println!("  {label:6} {}", if avail { "available" } else { "unavailable" });
-                                }
-                            }
+                        if let Some(data) = tla {
+                            let avail = data["available"].as_bool().unwrap_or(false);
+                            println!("  TLA+   {}", if avail { "available" } else { "unavailable" });
+                        }
+                        if let Some(data) = ts {
+                            let avail = data["available"].as_bool().unwrap_or(false);
+                            println!("  TS     {}", if avail { "available" } else { "unavailable" });
                         }
                     }
                 }
@@ -331,6 +342,114 @@ async fn handle_slash(
             }
         }
 
+        "/scan" => {
+            let dir = if arg.is_empty() { "~/Desktop/developer" } else { arg };
+            let expanded = if dir.starts_with("~/") {
+                format!("{}{}", std::env::var("HOME").unwrap_or_default(), &dir[1..])
+            } else { dir.to_string() };
+            let result = probe::scan_directory_async(&expanded).await;
+            let repos = result["repos"].as_array();
+            println!("  Scanned: {}", result["path"].as_str().unwrap_or("?"));
+            println!("  Found:   {} repos", result["repos_found"]);
+            if let Some(repos) = repos {
+                for r in repos {
+                    let connected = if r["opseeq_connected"].as_bool().unwrap_or(false) { "\x1b[32m●\x1b[0m" } else { "\x1b[31m○\x1b[0m" };
+                    let project = if r["has_cargo_toml"].as_bool().unwrap_or(false) { "Rust" }
+                        else if r["has_package_json"].as_bool().unwrap_or(false) { "Node" }
+                        else { "?" };
+                    println!("  {} {:30} {:6} mcp={}", connected, r["name"].as_str().unwrap_or("?"), project, r["has_mcp_json"].as_bool().unwrap_or(false));
+                }
+            }
+        }
+
+        "/verify" => {
+            if arg.is_empty() {
+                println!("  Usage: /verify <path_to_binary>");
+            } else {
+                let expanded = if arg.starts_with("~/") {
+                    format!("{}{}", std::env::var("HOME").unwrap_or_default(), &arg[1..])
+                } else { arg.to_string() };
+                let result = probe::verify_binary_async(&expanded).await;
+                println!("  Path:       {}", result["path"].as_str().unwrap_or("?"));
+                println!("  Exists:     {}", result["exists"]);
+                println!("  Executable: {}", result["is_executable"]);
+                println!("  Size:       {} bytes", result["size_bytes"]);
+                if result["is_app_bundle"].as_bool().unwrap_or(false) { println!("  Type:       macOS .app bundle"); }
+            }
+        }
+
+        "/organize" => {
+            if arg.is_empty() {
+                println!("  Usage: /organize <repo_path>");
+            } else {
+                let expanded = if arg.starts_with("~/") {
+                    format!("{}{}", std::env::var("HOME").unwrap_or_default(), &arg[1..])
+                } else { arg.to_string() };
+                let p = std::path::Path::new(&expanded);
+                if !p.is_dir() { println!("  Not a directory: {expanded}"); }
+                else {
+                    let env_path = p.join(".env");
+                    if !env_path.exists() {
+                        let _ = std::fs::write(&env_path, "# Opseeq connection\nOPENAI_BASE_URL=http://localhost:9090/v1\nOPSEEQ_URL=http://localhost:9090\n");
+                        println!("  Created .env with Opseeq vars");
+                    } else { println!("  .env exists"); }
+
+                    let mcp_path = p.join(".mcp.json");
+                    if !mcp_path.exists() {
+                        let _ = std::fs::write(&mcp_path, "{\"mcpServers\":{\"opseeq\":{\"url\":\"http://localhost:9090/mcp\"}}}\n");
+                        println!("  Created .mcp.json for Opseeq MCP");
+                    } else { println!("  .mcp.json exists"); }
+
+                    for f in ["package.json", "Cargo.toml", "README.md", "run.sh"] {
+                        let status = if p.join(f).exists() { "found" } else { "MISSING" };
+                        println!("  {f:20} {status}");
+                    }
+                }
+            }
+        }
+
+        "/browse" => {
+            if arg.is_empty() {
+                println!("  Usage: /browse <url>");
+                println!("  Examples: /browse http://localhost:3333  (Mermate)");
+                println!("            /browse http://localhost:8420  (Synth)");
+            } else {
+                println!("  Opening {} in browser-use...", arg);
+                match tokio::process::Command::new("browser-use")
+                    .args(["open", arg])
+                    .output()
+                    .await
+                {
+                    Ok(output) => {
+                        if output.status.success() {
+                            println!("  Navigated to {}", arg);
+                            match tokio::process::Command::new("browser-use")
+                                .arg("state")
+                                .output()
+                                .await
+                            {
+                                Ok(state) => {
+                                    let s = String::from_utf8_lossy(&state.stdout);
+                                    let lines: Vec<&str> = s.lines().take(20).collect();
+                                    for line in &lines {
+                                        println!("  {}", line);
+                                    }
+                                    if s.lines().count() > 20 {
+                                        println!("  ... ({} more elements)", s.lines().count() - 20);
+                                    }
+                                }
+                                Err(e) => println!("  State retrieval failed: {e}"),
+                            }
+                        } else {
+                            let err = String::from_utf8_lossy(&output.stderr);
+                            println!("  Failed: {}", err.trim());
+                        }
+                    }
+                    Err(e) => println!("  browser-use not available: {e}"),
+                }
+            }
+        }
+
         "/clear" => {
             messages.clear();
             println!("Conversation cleared.");
@@ -351,6 +470,10 @@ async fn handle_slash(
             println!("  /synth predict <q>  Generate prediction");
             println!("  /synth history      Recent predictions");
             println!("  /synth markets <q>  Search markets");
+            println!("  /scan [path]        Scan desktop for repos");
+            println!("  /verify <path>      Verify a binary/app");
+            println!("  /organize <path>    Clean up repo for Opseeq");
+            println!("  /browse <url>       Open URL in browser-use");
             println!("  /clear              Clear history");
             println!("  /quit               Exit");
         }

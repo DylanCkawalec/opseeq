@@ -1,0 +1,51 @@
+\contentsline {section}{\numberline {1}Introduction}{3}{section.1}%
+\contentsline {subsection}{\numberline {1.1}Scope and Claim Discipline}{3}{subsection.1.1}%
+\contentsline {section}{\numberline {2}Problem Framing and Motivation}{3}{section.2}%
+\contentsline {section}{\numberline {3}Unified Theoretical Foundations}{4}{section.3}%
+\contentsline {subsection}{\numberline {3.1}Canonical Notation}{4}{subsection.3.1}%
+\contentsline {subsection}{\numberline {3.2}Core Axioms}{5}{subsection.3.2}%
+\contentsline {subsection}{\numberline {3.3}Core Postulates}{5}{subsection.3.3}%
+\contentsline {subsection}{\numberline {3.4}Key Definitions}{6}{subsection.3.4}%
+\contentsline {subsection}{\numberline {3.5}Lemmas and Corollaries}{6}{subsection.3.5}%
+\contentsline {section}{\numberline {4}Full Architectural Overview}{7}{section.4}%
+\contentsline {section}{\numberline {5}Layer I: Inference and Runtime}{7}{section.5}%
+\contentsline {section}{\numberline {6}Layer II: The Triadic Cognitive Core}{7}{section.6}%
+\contentsline {subsection}{\numberline {6.1}Context Engine}{8}{subsection.6.1}%
+\contentsline {subsection}{\numberline {6.2}Process Engine}{8}{subsection.6.2}%
+\contentsline {subsection}{\numberline {6.3}Query Engine}{9}{subsection.6.3}%
+\contentsline {subsection}{\numberline {6.4}Triadic Integration}{9}{subsection.6.4}%
+\contentsline {section}{\numberline {7}Layer III: Reasoning and Search}{9}{section.7}%
+\contentsline {subsection}{\numberline {7.1}The OODA Orchestration Pipeline}{9}{subsection.7.1}%
+\contentsline {subsection}{\numberline {7.2}HPC-GoT: The Bounded Reasoning Controller}{10}{subsection.7.2}%
+\contentsline {subsection}{\numberline {7.3}Reconciliation: Determinism vs.\ Stochastic Inference}{10}{subsection.7.3}%
+\contentsline {section}{\numberline {8}Layer IV: Memory and Artifacts}{10}{section.8}%
+\contentsline {subsection}{\numberline {8.1}The CELLAR Runtime}{10}{subsection.8.1}%
+\contentsline {subsection}{\numberline {8.2}Hot and Cold Storage Planes}{11}{subsection.8.2}%
+\contentsline {subsection}{\numberline {8.3}Deduplication Pipeline}{11}{subsection.8.3}%
+\contentsline {section}{\numberline {9}Layer V: Observability and Optimization}{11}{section.9}%
+\contentsline {subsection}{\numberline {9.1}TraceRank}{11}{subsection.9.1}%
+\contentsline {subsection}{\numberline {9.2}Adapter Promotion Pipeline}{12}{subsection.9.2}%
+\contentsline {section}{\numberline {10}Layer VI: Security and Attestation}{12}{section.10}%
+\contentsline {subsection}{\numberline {10.1}RQLH Consensus}{12}{subsection.10.1}%
+\contentsline {subsection}{\numberline {10.2}Quantum-Weave: Post-Quantum Data Security}{12}{subsection.10.2}%
+\contentsline {subsection}{\numberline {10.3}Trust Boundary Model}{12}{subsection.10.3}%
+\contentsline {section}{\numberline {11}Layer VII: Integration --- OpenClaw, Mermate, and Synth}{12}{section.11}%
+\contentsline {subsection}{\numberline {11.1}OpenClaw}{12}{subsection.11.1}%
+\contentsline {subsection}{\numberline {11.2}Mermate}{13}{subsection.11.2}%
+\contentsline {subsection}{\numberline {11.3}Synth (Synthesis-Trade)}{13}{subsection.11.3}%
+\contentsline {subsection}{\numberline {11.4}Gateway Implementation}{13}{subsection.11.4}%
+\contentsline {section}{\numberline {12}Assembly and Implementation Logic}{13}{section.12}%
+\contentsline {subsection}{\numberline {12.1}How the System Is Constructed}{13}{subsection.12.1}%
+\contentsline {subsection}{\numberline {12.2}Runtime Wiring}{14}{subsection.12.2}%
+\contentsline {subsection}{\numberline {12.3}The Assembly Loop}{14}{subsection.12.3}%
+\contentsline {section}{\numberline {13}Temporal State Sequencing and System Behavior Over Time}{14}{section.13}%
+\contentsline {section}{\numberline {14}Human-in-the-Loop and Tool-Mediated Control}{15}{section.14}%
+\contentsline {subsection}{\numberline {14.1}The Human Invariant Layer}{15}{subsection.14.1}%
+\contentsline {subsection}{\numberline {14.2}Guardrailed Tool Execution}{15}{subsection.14.2}%
+\contentsline {subsection}{\numberline {14.3}Tiered Validation Policy}{15}{subsection.14.3}%
+\contentsline {section}{\numberline {15}Performance and Local Runtime Model}{15}{section.15}%
+\contentsline {section}{\numberline {16}Reliability and Production Constraints}{16}{section.16}%
+\contentsline {section}{\numberline {17}Final Synthesis}{16}{section.17}%
+\contentsline {section}{\numberline {A}Source Cross-Reference Matrix}{17}{appendix.A}%
+\contentsline {section}{\numberline {B}Unresolved Source}{17}{appendix.B}%
+\contentsline {section}{\numberline {C}Notation Index}{18}{appendix.C}%

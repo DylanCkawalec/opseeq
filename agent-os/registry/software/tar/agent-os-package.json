@@ -1,0 +1,7 @@
+{
+  "name": "@rivet-dev/agent-os-tar",
+  "type": "wasm",
+  "description": "GNU tar archiver",
+  "aptName": "tar",
+  "source": "rust"
+}

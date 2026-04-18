@@ -1,0 +1,84 @@
+#!/bin/bash
+# Opseeq desktop launcher: starts the dashboard (and optionally Docker gateway),
+# opens the browser, and tears down when all dashboard tabs are closed.
+set -euo pipefail
+
+# Optional overrides, e.g. OPSEEQ_DOCKER_STOP_ON_EXIT=1
+if [[ -f "$HOME/.opseeq/env" ]]; then
+  set -a
+  # shellcheck disable=SC1090
+  source "$HOME/.opseeq/env"
+  set +a
+fi
+
+if [[ -n "${OPSEEQ_HOME:-}" ]]; then
+  REPO="$OPSEEQ_HOME"
+elif [[ -f "$HOME/.opseeq/home" ]]; then
+  REPO="$(tr -d '\n' < "$HOME/.opseeq/home")"
+else
+  osascript -e 'display dialog "Set your Opseeq repo path once:\n\nmkdir -p ~/.opseeq\necho /path/to/opseeq > ~/.opseeq/home\n\nOr run: ./scripts/install-opseeq-desktop.sh" buttons {"OK"} default button 1 with title "Opseeq"' >/dev/null 2>&1 || true
+  exit 1
+fi
+
+if [[ ! -f "$REPO/dashboard/server.js" ]]; then
+  osascript -e "display dialog \"Invalid Opseeq repo (missing dashboard/server.js): $REPO\" buttons {\"OK\"} default button 1 with title \"Opseeq\"" >/dev/null 2>&1 || true
+  exit 1
+fi
+
+DASH_PORT="${OPSEEQ_DASHBOARD_PORT:-7070}"
+GATEWAY_URL="${OPSEEQ_GATEWAY_URL:-http://127.0.0.1:9090}"
+
+# Optional: ensure gateway container is running (skip with OPSEEQ_SKIP_DOCKER=1)
+if [[ "${OPSEEQ_SKIP_DOCKER:-0}" != "1" ]]; then
+  if command -v docker >/dev/null 2>&1; then
+    if docker info >/dev/null 2>&1; then
+      docker start opseeq 2>/dev/null || true
+      if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^opseeq$'; then
+        if [[ -f "$REPO/docker-compose.yml" ]]; then
+          (cd "$REPO" && docker compose up -d 2>/dev/null) || true
+        fi
+      fi
+    fi
+  fi
+fi
+
+export OPSEEQ_GATEWAY_URL="$GATEWAY_URL"
+export OPSEEQ_DASHBOARD_PORT="$DASH_PORT"
+export OPSEEQ_SESSION_SHUTDOWN=1
+export OPSEEQ_SHUTDOWN_GRACE_MS="${OPSEEQ_SHUTDOWN_GRACE_MS:-30000}"
+
+cd "$REPO/dashboard"
+if [[ ! -d node_modules/ws ]]; then
+  npm install --silent
+fi
+
+node server.js &
+NODE_PID=$!
+
+cleanup() {
+  kill "$NODE_PID" 2>/dev/null || true
+  if [[ "${OPSEEQ_DOCKER_STOP_ON_EXIT:-0}" == "1" ]] && command -v docker >/dev/null 2>&1; then
+    docker stop opseeq 2>/dev/null || true
+  fi
+}
+trap cleanup EXIT INT TERM
+
+sleep 1
+if ! kill -0 "$NODE_PID" 2>/dev/null; then
+  osascript -e 'display dialog "Opseeq dashboard failed to start. Check Terminal output if you ran from there." buttons {"OK"} default button 1 with title "Opseeq"' >/dev/null 2>&1 || true
+  exit 1
+fi
+
+open "http://127.0.0.1:${DASH_PORT}/"
+
+# Optional HITL terminal (local Rust binary)
+if [[ "${OPSEEQ_OPEN_HITL:-0}" == "1" ]] && [[ -x "$REPO/engine/target/release/opseeq-core" ]]; then
+  osascript <<OSA
+tell application "Terminal"
+  do script "cd \"$REPO/engine\" && exec ./target/release/opseeq-core chat"
+  activate
+end tell
+OSA
+fi
+
+wait "$NODE_PID"

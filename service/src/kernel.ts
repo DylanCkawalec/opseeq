@@ -14,6 +14,13 @@ export class KernelClient {
   private nextId = 1;
   private pending = new Map<number, RpcCallback>();
   private ready = false;
+  private binPath: string | null = null;
+  private restartCount = 0;
+  private restartTimer: ReturnType<typeof setTimeout> | null = null;
+  private stopped = false;
+
+  private static MAX_RESTARTS = 5;
+  private static RESTART_BACKOFF_BASE_MS = 2_000;
 
   async start(): Promise<void> {
     const candidates = [
@@ -22,21 +29,26 @@ export class KernelClient {
       '/app/opseeq-core',
     ];
 
-    let binPath: string | null = null;
     for (const p of candidates) {
       try {
         await import('node:fs').then(fs => fs.promises.access(p, 1));
-        binPath = p;
+        this.binPath = p;
         break;
       } catch { /* try next */ }
     }
 
-    if (!binPath) {
+    if (!this.binPath) {
       console.log('[kernel] opseeq-core binary not found, running without kernel');
       return;
     }
 
-    this.proc = spawn(binPath, ['serve'], {
+    this.spawnProcess();
+  }
+
+  private spawnProcess(): void {
+    if (!this.binPath || this.stopped) return;
+
+    this.proc = spawn(this.binPath, ['serve'], {
       stdio: ['pipe', 'pipe', 'pipe'],
       env: process.env,
     });
@@ -54,6 +66,18 @@ export class KernelClient {
         cb.reject(new Error('kernel process exited'));
       }
       this.pending.clear();
+
+      // Auto-restart with exponential backoff
+      if (!this.stopped && this.restartCount < KernelClient.MAX_RESTARTS) {
+        const delay = KernelClient.RESTART_BACKOFF_BASE_MS * Math.pow(2, this.restartCount);
+        this.restartCount++;
+        console.log(`[kernel] Restarting in ${delay}ms (attempt ${this.restartCount}/${KernelClient.MAX_RESTARTS})`);
+        this.restartTimer = setTimeout(() => {
+          this.spawnProcess();
+        }, delay);
+      } else if (this.restartCount >= KernelClient.MAX_RESTARTS) {
+        console.log('[kernel] Max restarts exceeded, running without kernel');
+      }
     });
 
     this.rl = createInterface({ input: this.proc.stdout! });
@@ -73,8 +97,39 @@ export class KernelClient {
       } catch { /* ignore malformed lines */ }
     });
 
-    this.ready = true;
-    console.log(`[kernel] opseeq-core started (pid ${this.proc.pid}) from ${binPath}`);
+    console.log(`[kernel] opseeq-core spawned (pid ${this.proc.pid}) from ${this.binPath}, waiting for ping...`);
+    this.handshake();
+  }
+
+  private handshake(): void {
+    const PING_TIMEOUT_MS = 5_000;
+    const id = this.nextId++;
+    const req = JSON.stringify({ id, method: 'kernel.ping', params: {} }) + '\n';
+
+    const timer = setTimeout(() => {
+      this.pending.delete(id);
+      console.log('[kernel] ping timeout — marking ready anyway (degraded)');
+      this.ready = true;
+      setTimeout(() => { if (this.ready) this.restartCount = 0; }, 30_000);
+    }, PING_TIMEOUT_MS);
+
+    this.pending.set(id, {
+      resolve: (result: unknown) => {
+        clearTimeout(timer);
+        const info = result as { version?: string; uptime_ms?: number; providers?: number } | null;
+        this.ready = true;
+        console.log(`[kernel] opseeq-core ready — v${info?.version ?? '?'}, ${info?.providers ?? '?'} providers`);
+        setTimeout(() => { if (this.ready) this.restartCount = 0; }, 30_000);
+      },
+      reject: (err: Error) => {
+        clearTimeout(timer);
+        console.log(`[kernel] ping failed: ${err.message} — marking ready anyway`);
+        this.ready = true;
+        setTimeout(() => { if (this.ready) this.restartCount = 0; }, 30_000);
+      },
+      timer,
+    });
+    this.proc!.stdin!.write(req);
   }
 
   isReady(): boolean {
@@ -101,6 +156,8 @@ export class KernelClient {
   }
 
   stop(): void {
+    this.stopped = true;
+    if (this.restartTimer) clearTimeout(this.restartTimer);
     if (this.proc) {
       this.proc.stdin?.end();
       this.proc.kill('SIGTERM');
