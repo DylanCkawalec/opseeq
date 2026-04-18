@@ -23,6 +23,7 @@ import type { KernelClient } from './kernel.js';
 import { recordSuccess, recordArtifact } from './feedback.js';
 import { fetchWithRetry, fetchStreamWithRetry } from './http-fetch-retry.js';
 import { resolveProviderFor, getRoutingTable } from './provider-resolution.js';
+import { getKeepAliveForModel, recordModelUse } from './model-residency.js';
 
 let _kernel: KernelClient | null = null;
 
@@ -138,6 +139,7 @@ async function callOllamaProvider(
   provider: ProviderConfig,
   req: ChatCompletionRequest,
 ): Promise<ChatCompletionResponse> {
+  const keepAlive = getKeepAliveForModel(req.model);
   const res = await fetchWithRetry(`${provider.baseUrl}/api/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -146,6 +148,7 @@ async function callOllamaProvider(
       stream: false,
       messages: req.messages,
       options: { temperature: req.temperature ?? 0 },
+      keep_alive: keepAlive,
     }),
   });
 
@@ -182,6 +185,8 @@ async function callOpenAICompatible(
   req: ChatCompletionRequest,
 ): Promise<ChatCompletionResponse> {
   const body: Record<string, unknown> = { ...req, stream: false };
+  // CoreThink API rejects the 'stream' property entirely
+  if (provider.name === 'corethink') delete body.stream;
 
   const res = await fetchWithRetry(`${provider.baseUrl}/chat/completions`, {
     method: 'POST',
@@ -277,6 +282,7 @@ export async function routeInference(
     response = await callAnthropicProvider(provider, req);
   } else if (isOllamaProvider(provider)) {
     response = await callOllamaProvider(provider, req);
+    recordModelUse(req.model);
   } else {
     response = await callOpenAICompatible(provider, req);
   }

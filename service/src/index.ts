@@ -35,7 +35,9 @@ import { getAbsorptionStatus, bootstrapSession, routePrompt, assembleToolPool, l
 import { createAdaptiveSession, executeInPane, getPipelineStatus, canExecuteStage, getMermateVendorStatus, verifyTlaPlus, PIPELINE_STAGES } from './iterm2-adaptive-plug.js';
 import { delegateTask, assessCapabilities, getOrchestratorDashboard, buildCrossRepoOptimizationTask, getActiveTasks as getActiveSubagentTasks, getTask as getSubagentTask } from './windsurf-subagent-orchestrator.js';
 import type { ChatCompletionRequest } from './router.js';
-import { getEmbeddingProvider } from './provider-resolution.js';
+import { getEmbeddingProvider, resolveNemotronAlias, estimateComplexity, resolveRoleAlias } from './provider-resolution.js';
+import { getResidencyState, ensureWarm } from './model-residency.js';
+import { getAgentOsStatus, createAgentVm, createAgentSession, promptSession, stopVm, listVms, listSessions as listAgentOsSessions } from './agent-os.js';
 
 const config = loadConfig();
 
@@ -77,7 +79,7 @@ const app = express();
 app.use(cors());
 app.use(express.json({ limit: '2mb' }));
 
-const VERSION = '5.0.0';
+const VERSION = '6.0.0';
 
 // ── Request ID + structured logging ──────────────────────────────
 app.use((req, _res, next) => {
@@ -427,6 +429,17 @@ app.post('/v1/chat/completions', authenticate, async (req, res) => {
     const body = req.body as ChatCompletionRequest;
     if (!body.messages?.length) { res.status(400).json({ error: { message: 'messages required', type: 'invalid_request' } }); return; }
     body.model = body.model || config.defaultModel;
+    // Resolve Nemotron virtual aliases (nemotron:small, nemotron:large, nemotron:auto)
+    if (body.model.startsWith('nemotron:')) {
+      const lastUserMsg = [...body.messages].reverse().find(m => m.role === 'user');
+      const resolved = resolveNemotronAlias(body.model, config, lastUserMsg?.content as string || '');
+      body.model = resolved.model;
+    }
+    // Resolve role-based virtual aliases (role:code, role:reason, role:utility, role:reference)
+    if (body.model.startsWith('role:')) {
+      const resolved = resolveRoleAlias(body.model, config);
+      if (resolved) body.model = resolved.model;
+    }
     // Idempotency: return cached result if same key
     const idemHeader = req.headers['idempotency-key'] as string | undefined;
     const idempotencyKey = idemHeader ? idempotencyStorageKey(idemHeader, body) : undefined;
@@ -598,7 +611,7 @@ app.get('/api/status', authenticate, async (_req, res) => {
     },
     mcp: { enabled: config.mcpEnabled, endpoint: '/mcp', transport: 'sse' },
     selfImprovement: getFeedbackSnapshot(),
-    transport: { primary: 'local-first (Ollama gpt-oss:20b -> NIM/OpenAI -> Anthropic by approval) + adaptive feedback', mode: 'opseeq-gateway' },
+    transport: { primary: 'hybrid (SeeQ-managed local [hot+active-large] + NIM [reference] + OpenAI/Anthropic [assistant]) + residency + stickiness', mode: 'opseeq-gateway' },
   });
 });
 
@@ -1018,10 +1031,75 @@ app.get('/api/subagents/task/:tid', (req, res) => {
   res.json(t);
 });
 
+// ── v2.5 AgentOS (SeeQ) Orchestration ─────────────────────────────
+app.get('/api/agent-os/status', (_req, res) => { res.json(getAgentOsStatus()); });
+app.post('/api/agent-os/vm', authenticate, async (req, res) => {
+  try { res.json(await createAgentVm(req.body || {})); }
+  catch (e) { res.status(500).json({ error: String(e) }); }
+});
+app.post('/api/agent-os/session', authenticate, async (req, res) => {
+  const { vmId, agentType } = req.body || {};
+  if (!vmId) { res.status(400).json({ error: 'vmId required' }); return; }
+  try { res.json(await createAgentSession(vmId, agentType)); }
+  catch (e) { res.status(500).json({ error: String(e) }); }
+});
+app.post('/api/agent-os/prompt', authenticate, async (req, res) => {
+  const { sessionId, prompt } = req.body || {};
+  if (!sessionId || !prompt) { res.status(400).json({ error: 'sessionId+prompt required' }); return; }
+  try { res.json(await promptSession(sessionId, prompt)); }
+  catch (e) { res.status(500).json({ error: String(e) }); }
+});
+app.post('/api/agent-os/vm/:vmId/stop', authenticate, async (req, res) => {
+  try { await stopVm(String(req.params.vmId)); res.json({ stopped: true }); }
+  catch (e) { res.status(500).json({ error: String(e) }); }
+});
+app.get('/api/agent-os/vms', (_req, res) => { res.json(listVms()); });
+app.get('/api/agent-os/sessions', (_req, res) => { res.json(listAgentOsSessions()); });
+
+// ── v2.5 Nemotron Routing ─────────────────────────────────────────
+app.post('/api/nemotron/resolve', (req, res) => {
+  const { model, prompt } = req.body || {};
+  if (!model) { res.status(400).json({ error: 'model required (nemotron:small|large|auto|fast|local|cloud)' }); return; }
+  const resolved = resolveNemotronAlias(model, config, prompt);
+  const complexity = prompt ? estimateComplexity(prompt) : null;
+  res.json({ requested: model, resolved: resolved.model, provider: resolved.provider?.name || null, complexity });
+});
+app.get('/api/nemotron/aliases', (_req, res) => {
+  res.json({
+    aliases: {
+      'nemotron:small': { model: 'nemotron-3-nano:4b', provider: 'ollama', description: 'Fast local inference (~8s, 2.8GB RAM)' },
+      'nemotron:fast': { model: 'nemotron-3-nano:4b', provider: 'ollama', description: 'Alias for nemotron:small' },
+      'nemotron:local': { model: 'nemotron-3-nano:4b', provider: 'ollama', description: 'Alias for nemotron:small' },
+      'nemotron:large': { model: 'nvidia/nemotron-3-super-120b-a12b', provider: 'nvidia-nim', description: 'Cloud inference via NVIDIA NIM (~650ms)' },
+      'nemotron:cloud': { model: 'nvidia/nemotron-3-super-120b-a12b', provider: 'nvidia-nim', description: 'Alias for nemotron:large' },
+      'nemotron:auto': { model: 'dynamic', provider: 'auto', description: 'Routes based on prompt complexity (threshold: NEMOTRON_AUTO_THRESHOLD, default 0.5)' },
+    },
+  });
+});
+
+// ── SeeQ Model Residency ──────────────────────────────────────────
+app.get('/api/seeq/residency', (_req, res) => { res.json(getResidencyState()); });
+app.post('/api/seeq/warmup', authenticate, async (req, res) => {
+  const { model } = req.body || {};
+  if (!model) { res.status(400).json({ error: 'model required' }); return; }
+  try { await ensureWarm(model); res.json({ warmed: model, state: getResidencyState() }); }
+  catch (e) { res.status(500).json({ error: String(e) }); }
+});
+app.get('/api/seeq/roles', (_req, res) => {
+  res.json({
+    aliases: {
+      'role:code': { model: 'qwen3-coder:30b', provider: 'ollama', description: 'Main local coding model (TS/Rust implementation, code review)' },
+      'role:reason': { model: 'deepseek-r1:32b', provider: 'ollama', description: 'Heavy local reasoning (decomposition, synthesis, formal reasoning)' },
+      'role:utility': { model: 'nemotron-3-nano:4b', provider: 'ollama', description: 'Fast local utility (quick completions, wrappers, transforms)' },
+      'role:reference': { model: 'nvidia/nemotron-3-super-120b-a12b', provider: 'nvidia-nim', description: 'High-capacity architecture/history/formal-spec reference' },
+    },
+  });
+});
+
 app.get('/', (_req, res) => {
   res.json({
     service: 'opseeq', version: VERSION,
-    description: 'Opseeq v2.4 — Full General-Clawd Absorption + Windsurf Subagent Optimization Edition',
+    description: 'Opseeq v6.0 — SeeQ Residency + Role Routing + Multi-Provider Edition',
     endpoints: {
       health: '/health', status: '/api/status', chat: '/api/chat',
       models: '/v1/models', completions: '/v1/chat/completions',
@@ -1039,6 +1117,10 @@ app.get('/', (_req, res) => {
       pipeline_mermate_vendor: '/api/pipeline/mermate-vendor',
       subagents_dashboard: '/api/subagents/dashboard', subagents_delegate: '/api/subagents/delegate',
       subagents_assess: '/api/subagents/assess', subagents_cross_repo: '/api/subagents/cross-repo',
+      agent_os_status: '/api/agent-os/status', agent_os_vm: '/api/agent-os/vm', agent_os_session: '/api/agent-os/session',
+      agent_os_prompt: '/api/agent-os/prompt', agent_os_vms: '/api/agent-os/vms', agent_os_sessions: '/api/agent-os/sessions',
+      nemotron_resolve: '/api/nemotron/resolve', nemotron_aliases: '/api/nemotron/aliases',
+      seeq_residency: '/api/seeq/residency', seeq_warmup: '/api/seeq/warmup', seeq_roles: '/api/seeq/roles',
     },
     providers: config.providers.map(p => p.name),
   });
@@ -1056,13 +1138,17 @@ kernel.start().then(() => {
 httpServer = app.listen(config.port, config.host, () => {
   console.log('');
   console.log('  ╔══════════════════════════════════════════╗');
-  console.log('  ║    OPSEEQ RUNTIME KERNEL v5.0              ║');
+  console.log('  ║    OPSEEQ RUNTIME KERNEL v6.0              ║');
+  console.log('  ║    SeeQ Residency + Role Routing            ║');
   console.log('  ╚══════════════════════════════════════════╝');
   console.log('');
   console.log(`  Listening:    http://${config.host}:${config.port}`);
   console.log(`  MCP:          ${config.mcpEnabled ? 'enabled (/mcp)' : 'disabled'}`);
   console.log(`  Idle:         ${idleEnabled ? `yes (${Math.round(config.idleTimeoutMs / 1000)}s)` : 'no'}`);
   console.log(`  Providers:    ${config.providers.map(p => `${p.name} (${p.models.length})`).join(', ') || 'none'}`);
+  console.log(`  AgentOS:      SeeQ absorbed (WASM+V8 isolate VMs)`);
+  console.log(`  SeeQ:         hot=[gpt-oss:20b,nano:4b] | active-large=dynamic | warm=15m`);
+  console.log(`  Roles:        code=qwen3-coder:30b | reason=deepseek-r1:32b | utility=nano:4b | ref=120b`);
   console.log(`  Mermate:      ${MERMATE_URL}`);
   console.log(`  Synth:        ${SYNTH_URL}`);
   console.log(`  Ollama:       ${OLLAMA_URL || 'not configured'}`);
@@ -1089,6 +1175,13 @@ httpServer = app.listen(config.port, config.host, () => {
   }, 15_000);
   watchIntervals.push(mermateIv);
   console.log(`  [mermate-watch] Polling ${MERMATE_URL} (adaptive 15-120s)`);
+
+  // SeeQ hot-tier model warmup (keep gpt-oss:20b and nemotron-3-nano:4b permanently loaded)
+  if (OLLAMA_URL) {
+    ensureWarm('gpt-oss:20b').catch(() => {});
+    ensureWarm('nemotron-3-nano:4b').catch(() => {});
+    console.log('  [seeq-residency] Warming hot-tier models: gpt-oss:20b, nemotron-3-nano:4b');
+  }
 });
 
 export { config, fetchJson, probeService, getMermateState, getOllamaState, chatWithOllama, synthWatch, MERMATE_URL, SYNTH_URL, OLLAMA_URL, VERSION };

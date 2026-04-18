@@ -569,11 +569,11 @@ const { setupNim } = require(${onboardPath});
     assert.equal(result.status, 0, result.stderr);
     const payload = JSON.parse(result.stdout.trim());
     assert.equal(payload.result.provider, "ollama-local");
-    assert.equal(payload.result.model, "qwen2.5:7b");
+    assert.equal(payload.result.model, "nemotron-3-nano:4b");
     assert.ok(payload.lines.some((line) => line.includes("Ollama starter models:")));
     assert.ok(payload.lines.some((line) => line.includes("No local Ollama models are installed yet")));
-    assert.ok(payload.lines.some((line) => line.includes("Pulling Ollama model: qwen2.5:7b")));
-    assert.equal(fs.readFileSync(pullLog, "utf8").trim(), "qwen2.5:7b");
+    assert.ok(payload.lines.some((line) => line.includes("Pulling Ollama model: nemotron-3-nano:4b")));
+    assert.equal(fs.readFileSync(pullLog, "utf8").trim(), "nemotron-3-nano:4b");
   });
 
   it("reprompts inside the Ollama model flow when a pull fails", () => {
@@ -609,7 +609,7 @@ printf '%s' "$status"
       `#!/usr/bin/env bash
 if [ "$1" = "pull" ]; then
   echo "$2" >> ${JSON.stringify(pullLog)}
-  if [ "$2" = "qwen2.5:7b" ]; then
+  if [ "$2" = "nemotron-3-nano:4b" ]; then
     exit 1
   fi
   exit 0
@@ -675,10 +675,10 @@ const { setupNim } = require(${onboardPath});
     const payload = JSON.parse(result.stdout.trim());
     assert.equal(payload.result.provider, "ollama-local");
     assert.equal(payload.result.model, "llama3.2:3b");
-    assert.ok(payload.lines.some((line) => line.includes("Failed to pull Ollama model 'qwen2.5:7b'")));
+    assert.ok(payload.lines.some((line) => line.includes("Failed to pull Ollama model 'nemotron-3-nano:4b'")));
     assert.ok(payload.lines.some((line) => line.includes("Choose a different Ollama model or select Other.")));
     assert.equal(payload.messages.filter((message) => /Ollama model id:/.test(message)).length, 1);
-    assert.equal(fs.readFileSync(pullLog, "utf8").trim(), "qwen2.5:7b\nllama3.2:3b");
+    assert.equal(fs.readFileSync(pullLog, "utf8").trim(), "nemotron-3-nano:4b\nllama3.2:3b");
   });
 
   it("reprompts for an OpenAI Other model when /models validation rejects it", () => {

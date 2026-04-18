@@ -1,0 +1,5 @@
+pre-commit:
+  commands:
+    generate-registry-readme:
+      glob: "registry/software/*/agent-os-package.json"
+      run: node registry/scripts/generate-readme.mjs && git add README.md

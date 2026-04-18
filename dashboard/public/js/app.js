@@ -758,10 +758,96 @@
     terminalScreen.addEventListener('click', () => terminalInput.focus());
   }
 
+  // ── v2.5 Systems Tab ────────────────────────────────────────────
+  async function pollV25Systems() {
+    try {
+      const [absorptionRes, toolsRes, sessionsRes, stagesRes, vendorRes, subagentRes] = await Promise.all([
+        fetch('/api/absorption/status').then(r => r.ok ? r.json() : null).catch(() => null),
+        fetch('/api/execution/tools').then(r => r.ok ? r.json() : null).catch(() => null),
+        fetch('/api/execution/sessions').then(r => r.ok ? r.json() : null).catch(() => null),
+        fetch('/api/pipeline/stages').then(r => r.ok ? r.json() : null).catch(() => null),
+        fetch('/api/pipeline/mermate-vendor').then(r => r.ok ? r.json() : null).catch(() => null),
+        fetch('/api/subagents/dashboard').then(r => r.ok ? r.json() : null).catch(() => null),
+      ]);
+
+      if (absorptionRes) {
+        text('absorption-status', absorptionRes.absorbed ? 'Complete' : 'Pending');
+        text('absorption-source', absorptionRes.source || '--');
+        text('absorption-bridge', absorptionRes.externalBridgeRemaining ? 'Active' : 'Eliminated');
+        text('absorption-modules', (absorptionRes.modules || []).join(', ') || '--');
+      }
+
+      if (toolsRes) {
+        const tools = toolsRes.tools || [];
+        text('exec-tools', String(tools.length));
+        const commands = toolsRes.commands || toolsRes.registrySize || '--';
+        text('exec-commands', String(typeof commands === 'number' ? commands : tools.length));
+      }
+
+      if (sessionsRes) {
+        text('exec-sessions', String(Array.isArray(sessionsRes) ? sessionsRes.length : 0));
+      }
+
+      const stagesList = $('pipeline-stages-list');
+      if (stagesRes && Array.isArray(stagesRes) && stagesList) {
+        stagesList.innerHTML = stagesRes.map(s =>
+          `<div class="sandbox-item"><span class="state-pill ${s.required ? 'ok' : 'muted'}">${escapeHtml(s.id)}</span> <span>${escapeHtml(s.label)}</span> <span style="color:var(--text-dim);font-size:11px;">${s.dependencies.length ? 'deps: ' + s.dependencies.join(', ') : 'no deps'}</span></div>`
+        ).join('');
+      }
+
+      if (vendorRes) {
+        text('pipeline-repo', vendorRes.repoExists ? 'Found' : 'Not found');
+        text('pipeline-tla2tools', vendorRes.tla2toolsJarExists ? 'Present' : 'Missing');
+        text('pipeline-warp', vendorRes.warpEngineExists ? 'Present' : 'Missing');
+      }
+
+      if (subagentRes) {
+        text('subagent-total', String(subagentRes.totalTasks || 0));
+        text('subagent-active', String(subagentRes.activeTasks || 0));
+        text('subagent-completed', String(subagentRes.completedTasks || 0));
+        text('subagent-failed', String(subagentRes.failedTasks || 0));
+
+        const capList = $('subagent-capabilities');
+        if (capList && Array.isArray(subagentRes.capabilities)) {
+          capList.innerHTML = subagentRes.capabilities.map(c =>
+            `<div class="sandbox-item"><span class="state-pill muted">${escapeHtml(c.capability)}</span> <span style="font-size:12px;">${escapeHtml(c.description)}</span> <span style="color:var(--text-dim);font-size:11px;">(${c.taskCount} tasks)</span></div>`
+          ).join('');
+        }
+
+        const taskList = $('subagent-recent-tasks');
+        if (taskList && Array.isArray(subagentRes.recentTasks)) {
+          if (subagentRes.recentTasks.length === 0) {
+            taskList.innerHTML = '<div class="empty-state">No subagent tasks recorded yet.</div>';
+          } else {
+            taskList.innerHTML = subagentRes.recentTasks.map(t =>
+              `<div class="sandbox-item"><span class="state-pill ${t.status === 'completed' ? 'ok' : t.status === 'failed' ? 'error' : 'muted'}">${escapeHtml(t.status)}</span> <span>${escapeHtml(t.description)}</span> <span style="color:var(--text-dim);font-size:11px;">${escapeHtml(t.taskId.slice(0, 8))}</span></div>`
+            ).join('');
+          }
+        }
+      }
+    } catch (_) { /* v2.5 panel non-critical */ }
+  }
+
+  const btnExecRefresh = $('btn-exec-refresh');
+  if (btnExecRefresh) {
+    btnExecRefresh.addEventListener('click', () => pollV25Systems());
+  }
+  const btnSubagentRefresh = $('btn-subagent-refresh');
+  if (btnSubagentRefresh) {
+    btnSubagentRefresh.addEventListener('click', () => pollV25Systems());
+  }
+
+  // Poll v2.5 systems on tab switch
+  document.querySelectorAll('[data-view-target="v25systems"]').forEach(tab => {
+    tab.addEventListener('click', () => pollV25Systems());
+  });
+
   setActiveView('overview');
   connectTerminalSocket();
   poll().catch(() => {});
+  pollV25Systems();
   setInterval(() => {
     poll().catch(() => {});
   }, POLL_MS);
+  setInterval(() => pollV25Systems(), 15_000);
 })();

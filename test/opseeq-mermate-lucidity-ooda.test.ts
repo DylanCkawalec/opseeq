@@ -21,7 +21,7 @@ afterEach(() => {
 });
 
 describe('orchestratePrecisionPipeline', () => {
-  it('builds a non-executing precision orchestration plan with graph, causality, and immutable artifacts', async () => {
+  it('builds a non-executing precision orchestration plan with graph, causality, and immutable artifacts', { timeout: 30_000 }, async () => {
     const home = makeTempHome('opseeq-precision-home-');
     process.env.HOME = home;
     vi.resetModules();

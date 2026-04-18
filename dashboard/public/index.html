@@ -100,6 +100,7 @@
           <button class="view-tab" data-view-target="graph" type="button">Living Graph</button>
           <button class="view-tab" data-view-target="nemoclaw" type="button">NemoClaw</button>
           <button class="view-tab" data-view-target="models" type="button">Models</button>
+          <button class="view-tab" data-view-target="v25systems" type="button">v2.5 Systems</button>
         </div>
       </div>
       <span class="version-badge" id="version-badge">v--</span>
@@ -399,12 +400,12 @@
           <div class="card-icon control">E</div>
           <div>
             <div class="card-title">Embedded Terminal</div>
-            <div class="card-subtitle">Browser terminal for NemoClaw connect/log sessions and General-Clawd workspace access</div>
+            <div class="card-subtitle">Browser terminal for NemoClaw connect/log sessions and Execution Runtime access</div>
           </div>
         </div>
         <div class="action-row terminal-toolbar">
           <button class="btn-open" type="button" id="btn-terminal-shell">Opseeq Shell</button>
-          <button class="btn-open" type="button" id="btn-terminal-general-clawd">General-Clawd</button>
+          <button class="btn-open" type="button" id="btn-terminal-general-clawd">Execution Runtime</button>
           <button class="btn-open" type="button" id="btn-terminal-stop">Stop</button>
           <button class="btn-open" type="button" id="btn-terminal-clear">Clear</button>
           <span class="state-pill muted" id="nemoclaw-terminal-state">Connecting…</span>
@@ -414,6 +415,114 @@
           <input type="text" class="plugin-input terminal-input" id="nemoclaw-terminal-input" placeholder="Type input for the active terminal session and press Enter">
           <button class="btn-open" type="button" id="btn-nemoclaw-terminal-send">Send</button>
           <button class="btn-open" type="button" id="btn-nemoclaw-terminal-interrupt">Ctrl+C</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── v2.5 Systems ─────────────────────────────────────── -->
+    <section class="view-panel" data-view="v25systems" hidden>
+      <div class="nemoclaw-grid">
+        <!-- Absorption Status -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-icon" style="background:#00c85322;color:#00c853;">&#10003;</div>
+            <div>
+              <div class="card-title">General-Clawd Absorption</div>
+              <div class="card-subtitle">Native execution runtime status — no external bridge</div>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="card-stat"><span class="key">Absorbed</span><span class="val" id="absorption-status">--</span></div>
+            <div class="card-stat"><span class="key">Source</span><span class="val" id="absorption-source">--</span></div>
+            <div class="card-stat"><span class="key">External Bridge</span><span class="val" id="absorption-bridge">--</span></div>
+            <div class="card-stat"><span class="key">Modules</span><span class="val val-mono" id="absorption-modules">--</span></div>
+          </div>
+        </div>
+
+        <!-- Execution Runtime -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-icon" style="background:#7c4dff22;color:#7c4dff;">E</div>
+            <div>
+              <div class="card-title">Execution Runtime</div>
+              <div class="card-subtitle">Commands, tools, sessions (absorbed from General-Clawd)</div>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="card-stat"><span class="key">Commands</span><span class="val" id="exec-commands">--</span></div>
+            <div class="card-stat"><span class="key">Tools</span><span class="val" id="exec-tools">--</span></div>
+            <div class="card-stat"><span class="key">Sessions</span><span class="val" id="exec-sessions">--</span></div>
+          </div>
+          <div class="action-row">
+            <button class="btn-open" type="button" id="btn-exec-refresh">Refresh</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Pipeline Management -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-icon" style="background:#ff910022;color:#ff9100;">P</div>
+          <div>
+            <div class="card-title">Mermate Pipeline (iTerm2 Adaptive Plug)</div>
+            <div class="card-subtitle">spec &rarr; mermaid &rarr; MAX &rarr; TLA+ &rarr; TypeScript &rarr; Rust &rarr; .app</div>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="card-stat"><span class="key">Mermate Repo</span><span class="val" id="pipeline-repo">--</span></div>
+          <div class="card-stat"><span class="key">tla2tools.jar</span><span class="val" id="pipeline-tla2tools">--</span></div>
+          <div class="card-stat"><span class="key">warp-engine</span><span class="val" id="pipeline-warp">--</span></div>
+        </div>
+        <div class="sandbox-list" id="pipeline-stages-list">
+          <div class="empty-state">Loading pipeline stages...</div>
+        </div>
+      </div>
+
+      <!-- Windsurf Subagent Orchestrator -->
+      <div class="nemoclaw-grid">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-icon" style="background:#00b0ff22;color:#00b0ff;">W</div>
+            <div>
+              <div class="card-title">Windsurf Subagent Orchestrator</div>
+              <div class="card-subtitle">Cross-repo optimization task delegation and tracking</div>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="card-stat"><span class="key">Total Tasks</span><span class="val" id="subagent-total">0</span></div>
+            <div class="card-stat"><span class="key">Active</span><span class="val" id="subagent-active">0</span></div>
+            <div class="card-stat"><span class="key">Completed</span><span class="val" id="subagent-completed">0</span></div>
+            <div class="card-stat"><span class="key">Failed</span><span class="val" id="subagent-failed">0</span></div>
+          </div>
+          <div class="action-row">
+            <button class="btn-open" type="button" id="btn-subagent-refresh">Refresh</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <div class="card-icon" style="background:#00b0ff22;color:#00b0ff;">C</div>
+            <div>
+              <div class="card-title">Capabilities</div>
+              <div class="card-subtitle">Subagent capability taxonomy and task distribution</div>
+            </div>
+          </div>
+          <div class="sandbox-list" id="subagent-capabilities">
+            <div class="empty-state">Loading capabilities...</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-icon" style="background:#00b0ff22;color:#00b0ff;">R</div>
+          <div>
+            <div class="card-title">Recent Subagent Tasks</div>
+            <div class="card-subtitle">Last 10 delegated tasks with status and mandate</div>
+          </div>
+        </div>
+        <div class="sandbox-list" id="subagent-recent-tasks">
+          <div class="empty-state">No subagent tasks recorded yet.</div>
         </div>
       </div>
     </section>

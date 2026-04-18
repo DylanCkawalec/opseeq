@@ -22,8 +22,8 @@ services:
       context: .
       dockerfile: Dockerfile.service
       tags:
-        - opseeq:v5
-    image: opseeq:v5
+        - opseeq:v6.0
+    image: opseeq:v6.0
     container_name: opseeq
     init: true
     stop_grace_period: 10s
@@ -79,3 +79,74 @@ services:
   #     timeout: 10s
   #     retries: 5
   #     start_period: 120s
+
+  # Mermate — Mermaid-GPT Architecture Pipeline (diagram generation)
+  mermate:
+    image: mermate:v5
+    container_name: mermate
+    ports:
+      - "3333:3333"
+    env_file:
+      - ../mermaid/.env
+    environment:
+      - OPSEEQ_URL=http://opseeq:9090
+    restart: unless-stopped
+    networks:
+      - opseeq-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3333/api/copilot/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    depends_on:
+      opseeq:
+        condition: service_healthy
+
+  # Synth — AI Prediction Market Desk
+  synth:
+    image: synth:v5
+    container_name: synth
+    ports:
+      - "8420:8420"
+    env_file:
+      - ../synthesis-trade/.env
+    environment:
+      - OPSEEQ_URL=http://opseeq:9090
+    restart: unless-stopped
+    networks:
+      - opseeq-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8420/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    depends_on:
+      opseeq:
+        condition: service_healthy
+
+  # Lucidity — Postgres for context/persistence
+  lucidity-postgres:
+    image: postgres:16-alpine
+    container_name: lucidity-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: lucidity
+      POSTGRES_PASSWORD: lucidity
+      POSTGRES_DB: lucidity
+    ports:
+      - "5433:5432"
+    volumes:
+      - lucidity-postgres:/var/lib/postgresql/data
+    networks:
+      - opseeq-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lucidity"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+volumes:
+  lucidity-postgres:

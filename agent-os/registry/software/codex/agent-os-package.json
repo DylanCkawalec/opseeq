@@ -1,0 +1,7 @@
+{
+  "name": "@rivet-dev/agent-os-codex",
+  "type": "wasm",
+  "description": "OpenAI Codex integration (codex, codex-exec)",
+  "aptName": "codex",
+  "source": "rust"
+}

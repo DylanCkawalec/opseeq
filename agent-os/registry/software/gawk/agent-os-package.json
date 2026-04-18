@@ -1,0 +1,7 @@
+{
+  "name": "@rivet-dev/agent-os-gawk",
+  "type": "wasm",
+  "description": "GNU awk text processing",
+  "aptName": "gawk",
+  "source": "rust"
+}

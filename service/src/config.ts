@@ -53,6 +53,16 @@ function parseProviders(): ProviderConfig[] {
     });
   }
 
+  if (process.env.CORE_THINK_AI_API_KEY) {
+    providers.push({
+      name: 'corethink',
+      baseUrl: process.env.CORE_THINK_AI_BASE_URL || 'https://api.corethink.ai/v1',
+      apiKey: process.env.CORE_THINK_AI_API_KEY,
+      models: (process.env.CORE_THINK_AI_MODELS || 'corethink/corethink-ai-1.0').split(',').map(s => s.trim()),
+      priority: 15,
+    });
+  }
+
   if (process.env.OPENAI_API_KEY) {
     providers.push({
       name: 'openai',

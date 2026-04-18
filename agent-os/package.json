@@ -1,0 +1,30 @@
+{
+	"name": "@rivet-dev/agent-os-workspace",
+	"private": true,
+	"packageManager": "pnpm@10.13.1",
+	"engines": {
+		"node": ">=20"
+	},
+	"scripts": {
+		"start": "npx turbo watch build",
+		"build": "npx turbo build",
+		"test": "npx turbo test",
+		"test:watch": "npx turbo watch test",
+		"check-types": "npx turbo check-types",
+		"lint": "pnpm biome check .",
+		"fmt": "pnpm biome check --write --diagnostic-level=error ."
+	},
+	"devDependencies": {
+		"@biomejs/biome": "^2.3",
+		"@copilotkit/llmock": "^1.6.0",
+		"@rivet-dev/agent-os-common": "workspace:*",
+		"@rivet-dev/agent-os-core": "workspace:*",
+		"@rivet-dev/agent-os-pi": "workspace:*",
+		"@types/node": "^22.19.15",
+		"turbo": "^2.5.6",
+		"typescript": "^5.9.2"
+	},
+	"resolutions": {
+		"@rivet-dev/agent-os-core": "workspace:*"
+	}
+}

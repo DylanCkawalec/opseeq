@@ -1,0 +1,7 @@
+{
+  "name": "@rivet-dev/agent-os-yq",
+  "type": "wasm",
+  "description": "yq YAML/JSON processor",
+  "aptName": "yq",
+  "source": "rust"
+}

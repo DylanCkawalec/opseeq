@@ -1,0 +1,7 @@
+{
+  "name": "@rivet-dev/agent-os-jq",
+  "type": "wasm",
+  "description": "jq JSON processor",
+  "aptName": "jq",
+  "source": "rust"
+}

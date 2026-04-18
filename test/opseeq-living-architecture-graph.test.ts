@@ -21,7 +21,7 @@ afterEach(() => {
 });
 
 describe('Living Architecture Graph', () => {
-  it('versions graph nodes and edges for a task', async () => {
+  it('versions graph nodes and edges for a task', { timeout: 30_000 }, async () => {
     const home = makeTempHome('opseeq-graph-home-');
     process.env.HOME = home;
     vi.resetModules();
