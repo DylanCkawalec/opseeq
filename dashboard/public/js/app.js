@@ -66,12 +66,27 @@
       const active = button.getAttribute('data-view-target') === view;
       button.classList.toggle('active', active);
       button.setAttribute('aria-selected', active ? 'true' : 'false');
+      button.setAttribute('tabindex', active ? '0' : '-1');
     });
     document.querySelectorAll('[data-view]').forEach((panel) => {
       const active = panel.getAttribute('data-view') === view;
       panel.hidden = !active;
       panel.classList.toggle('view-panel-active', active);
+      panel.setAttribute('aria-hidden', active ? 'false' : 'true');
     });
+  }
+  function moveTabFocus(current, direction) {
+    const tabs = Array.from(document.querySelectorAll('[data-view-target]'));
+    const currentIndex = tabs.indexOf(current);
+    if (currentIndex < 0 || tabs.length === 0) return;
+    let nextIndex = currentIndex;
+    if (direction === 'first') nextIndex = 0;
+    else if (direction === 'last') nextIndex = tabs.length - 1;
+    else nextIndex = (currentIndex + direction + tabs.length) % tabs.length;
+    const nextTab = tabs[nextIndex];
+    const view = nextTab.getAttribute('data-view-target');
+    if (view) setActiveView(view);
+    nextTab.focus();
   }
   function renderRepoConnectSummary(result) {
     const lines = [
@@ -590,6 +605,21 @@
 
   document.querySelectorAll('[data-view-target]').forEach((button) => {
     button.addEventListener('click', () => setActiveView(button.getAttribute('data-view-target')));
+    button.addEventListener('keydown', (event) => {
+      if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
+        event.preventDefault();
+        moveTabFocus(button, 1);
+      } else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
+        event.preventDefault();
+        moveTabFocus(button, -1);
+      } else if (event.key === 'Home') {
+        event.preventDefault();
+        moveTabFocus(button, 'first');
+      } else if (event.key === 'End') {
+        event.preventDefault();
+        moveTabFocus(button, 'last');
+      }
+    });
   });
 
   document.querySelectorAll('[data-app-id]').forEach((node) => {

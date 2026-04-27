@@ -88,7 +88,10 @@ pub fn load_config() -> KernelConfig {
             name: "ollama".into(),
             base_url: ollama_url.clone(),
             api_key: "ollama".into(),
-            models: parse_models("OLLAMA_MODELS", "gpt-oss:20b"),
+            models: parse_models(
+                "OLLAMA_MODELS",
+                "gpt-oss:20b,nemotron-3-nano:4b,qwen3.5:35b-a3b-coding-mxfp8,qwen3.5:9b",
+            ),
             priority: 10,
         });
     }

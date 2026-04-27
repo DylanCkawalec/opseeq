@@ -1,12 +1,19 @@
 (function () {
   const CIRCUMFERENCE = 2 * Math.PI * 52; // matches r=52 in SVG
   const OODA_STEPS = ['observe', 'orient', 'decide', 'act'];
+  const DEFAULT_BUTTON_HTML = '<span class="precision-icon" aria-hidden="true">&#9889;</span> Plan Precision Workflow';
+  const DEFAULT_OUTPUT = 'Awaiting workflow plan...';
   let pipelineRunning = false;
   let currentOodaStep = -1;
 
   function $(id) { return document.getElementById(id); }
   function escapeHtml(v) {
-    return String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    return String(v ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
   }
   function text(id, val) {
     const el = $(id);
@@ -47,15 +54,48 @@
   }
 
   // ── Stage rendering ────────────────────────────
-  function renderStage(stage, status, durationMs) {
+  function normalizeStageStatus(status) {
+    switch (status) {
+      case 'executed': return 'done';
+      case 'planned':
+      case 'ready': return 'ready';
+      case 'pending_approval': return 'pending';
+      case 'blocked': return 'blocked';
+      case 'unavailable': return 'unavailable';
+      case 'running':
+      case 'done':
+      case 'failed': return status;
+      default: return 'pending';
+    }
+  }
+
+  function stageStatusLabel(status) {
+    switch (status) {
+      case 'done': return 'done';
+      case 'ready': return 'ready';
+      case 'pending': return 'approval required';
+      case 'blocked': return 'blocked';
+      case 'unavailable': return 'unavailable';
+      case 'running': return 'running';
+      case 'failed': return 'failed';
+      default: return status;
+    }
+  }
+
+  function renderStage(stage, status, durationMs, summary) {
     const stagesEl = $('precision-stages');
     if (!stagesEl) return;
     if (stagesEl.querySelector('.empty-state')) stagesEl.innerHTML = '';
-    const existing = stagesEl.querySelector(`[data-stage="${stage}"]`);
-    const cls = status === 'running' ? 'running' : status === 'done' ? 'done' : 'failed';
-    const timeStr = durationMs != null ? `${durationMs}ms` : '...';
+    const safeStageSelector = typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(String(stage)) : String(stage).replace(/"/g, '\\"');
+    const existing = stagesEl.querySelector(`[data-stage="${safeStageSelector}"]`);
+    const cls = normalizeStageStatus(status);
+    const timeStr = durationMs != null ? `${durationMs}ms` : '';
     const html = `<div class="precision-stage-item ${cls}" data-stage="${escapeHtml(stage)}">
-      <span class="stage-name">${escapeHtml(stage)}</span>
+      <span class="stage-body">
+        <span class="stage-name">${escapeHtml(stage)}</span>
+        ${summary ? `<span class="stage-summary">${escapeHtml(summary)}</span>` : ''}
+      </span>
+      <span class="stage-status">${escapeHtml(stageStatusLabel(cls))}</span>
       <span class="stage-time">${timeStr}</span>
     </div>`;
     if (existing) {
@@ -68,21 +108,65 @@
   function appendOutput(msg) {
     const el = $('precision-output');
     if (!el) return;
-    if (el.textContent === 'Awaiting pipeline execution...') el.textContent = '';
+    if (el.textContent === DEFAULT_OUTPUT || el.textContent === 'Awaiting pipeline execution...') el.textContent = '';
     el.textContent += msg + '\n';
     el.scrollTop = el.scrollHeight;
   }
 
-  function renderPlan(plan) {
+  function renderPlan(plan, permission) {
     const el = $('precision-plan');
     if (!el) return;
     if (!plan || !plan.length) {
-      el.innerHTML = '<div class="empty-state">Plan will appear after pipeline starts.</div>';
+      el.innerHTML = '<div class="empty-state">Plan will appear after the workflow is prepared.</div>';
       return;
     }
-    el.innerHTML = plan.map((step, i) =>
-      `<div class="precision-stage-item" style="font-size:12px;"><span class="stage-name">${i + 1}. ${escapeHtml(step)}</span></div>`
+    const planHtml = plan.map((step, i) =>
+      `<div class="precision-stage-item ready" style="font-size:12px;">
+        <span class="stage-body">
+          <span class="stage-name">${i + 1}. ${escapeHtml(step)}</span>
+        </span>
+      </div>`
     ).join('');
+    const approvalHtml = permission
+      ? `<div class="precision-stage-item pending" style="font-size:12px;">
+          <span class="stage-body">
+            <span class="stage-name">Approval envelope</span>
+            <span class="stage-summary">${escapeHtml(permission.summary || 'Review the proposed scope before execution.')}</span>
+          </span>
+          <span class="stage-status">${permission.requiresApproval ? 'approval required' : 'not required'}</span>
+        </div>`
+      : '';
+    el.innerHTML = planHtml + approvalHtml;
+  }
+
+  function renderApprovalSummary(result) {
+    const el = $('precision-approval-summary');
+    if (!el) return;
+    const envelope = result?.executionEnvelope || {};
+    const permission = result?.ooda?.permission || {};
+    const approved = envelope.approved === true;
+    const commands = Array.isArray(envelope.commands) && envelope.commands.length
+      ? envelope.commands.join(', ')
+      : 'No effectful commands approved';
+    const files = Array.isArray(envelope.fileScope) && envelope.fileScope.length
+      ? envelope.fileScope.join(', ')
+      : 'No file scope declared';
+    const network = Array.isArray(envelope.networkScope) && envelope.networkScope.length
+      ? envelope.networkScope.join(', ')
+      : 'Local services only or not declared';
+    const task = envelope.taskId || result?.taskId || 'unassigned';
+    el.className = `precision-approval-card ${approved ? 'approved' : 'blocked'}`;
+    el.innerHTML = `<span class="state-pill ${approved ? 'ok' : 'warn'}">${approved ? 'Approved' : 'Approval required'}</span>
+      <p>${approved
+        ? 'The returned envelope is approved for execution.'
+        : 'No effectful render, codegen, file, terminal, or external service action has been approved from this screen.'}</p>
+      <div class="approval-scope">
+        <div><span>Task</span><code>${escapeHtml(task)}</code></div>
+        <div><span>Why</span><code>${escapeHtml(permission.summary || 'Plan and inspect before execution.')}</code></div>
+        <div><span>Tools</span><code>${escapeHtml(commands)}</code></div>
+        <div><span>Files</span><code>${escapeHtml(files)}</code></div>
+        <div><span>Network</span><code>${escapeHtml(network)}</code></div>
+      </div>`;
   }
 
   // ── Precision Orchestration Pipeline ─────────────
@@ -94,72 +178,77 @@
       return;
     }
     const btn = $('btn-precision-run');
-    if (btn) { btn.disabled = true; btn.textContent = 'Running Pipeline...'; }
+    if (btn) { btn.disabled = true; btn.textContent = 'Preparing Plan...'; }
     pipelineRunning = true;
+    let succeeded = false;
 
     const stagesEl = $('precision-stages');
     if (stagesEl) stagesEl.innerHTML = '';
     const outputEl = $('precision-output');
     if (outputEl) outputEl.textContent = '';
-
-    const stages = ['render', 'lucidity-cleanup', 'tla', 'ts', 'rust'];
-    const oodaMap = { 'render': 0, 'lucidity-cleanup': 0, 'tla': 1, 'ts': 2, 'rust': 3 };
+    const approvalEl = $('precision-approval-summary');
+    if (approvalEl) {
+      approvalEl.className = 'precision-approval-card blocked';
+      approvalEl.innerHTML = '<span class="state-pill warn">Approval required</span><p>Preparing a plan. No effectful action is approved yet.</p>';
+    }
 
     try {
-      // Phase 1: OODA Observe — fractal context
       setOodaProgress(0);
-      renderPlan(['Mermate MAX render', 'Lucidity semantic cleanup', 'TLA+ formal spec', 'TypeScript generation', 'Rust binary (optional)']);
-      appendOutput('[ooda] Observe: building fractal context...');
-
-      // Phase 2: Run pipeline through gateway
+      renderPlan(['Capture intent and repo context.', 'Build OODA plan and permission envelope.', 'Return proposed services, files, network scope, and artifacts.']);
+      renderStage('observe_orient', 'running', null, 'Building local context and permission envelope.');
+      appendOutput('[ooda] Observe: preparing local planning context...');
       setOodaProgress(1);
-      appendOutput('[ooda] Orient: dispatching to Mermate pipeline...');
+      appendOutput('[ooda] Orient: requesting Precision Orchestration plan from the gateway...');
 
-      for (const stage of stages) {
-        const oodaIdx = oodaMap[stage] ?? currentOodaStep;
-        if (oodaIdx > currentOodaStep) setOodaProgress(oodaIdx);
-        renderStage(stage, 'running');
-        appendOutput(`[stage] ${stage}: starting...`);
+      const t0 = Date.now();
+      const result = await fetchJson('/api/ooda/precision', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          intent: source,
+          inputMode: 'idea',
+          maxMode: true,
+          approved: false,
+          execute: false,
+          includeTla: true,
+          includeTs: true,
+          includeRust: false,
+        }),
+      }, 120000);
+      const elapsed = Date.now() - t0;
 
-        try {
-          const t0 = Date.now();
-          if (stage === 'render') {
-            const result = await fetchJson('/api/ooda/precision', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ source, inputMode: 'idea', maxMode: true, includeTla: true, includeTs: true, includeRust: false }),
-            }, 120000);
-            const elapsed = Date.now() - t0;
-            renderStage(stage, 'done', elapsed);
-            appendOutput(`[stage] ${stage}: complete (${elapsed}ms)`);
-
-            if (result.stages) {
-              result.stages.forEach((s) => {
-                if (s.stage !== 'render') {
-                  renderStage(s.stage, s.success ? 'done' : 'failed', s.duration_ms);
-                  appendOutput(`[stage] ${s.stage}: ${s.success ? 'success' : 'failed'} (${s.duration_ms}ms)`);
-                }
-              });
-            }
-            break;
-          } else {
-            renderStage(stage, 'done', 0);
-            appendOutput(`[stage] ${stage}: handled by orchestrator`);
-          }
-        } catch (err) {
-          renderStage(stage, 'failed');
-          appendOutput(`[stage] ${stage}: FAILED — ${err instanceof Error ? err.message : String(err)}`);
-        }
+      setOodaProgress(2);
+      renderPlan(result.ooda?.detailedPlan, result.ooda?.permission);
+      renderApprovalSummary(result);
+      if (stagesEl) stagesEl.innerHTML = '';
+      const stages = Array.isArray(result.stageResults) ? result.stageResults : [];
+      if (stages.length === 0) {
+        renderStage('planning', 'done', elapsed, 'Plan returned without stage detail.');
+      } else {
+        stages.forEach((stage) => {
+          renderStage(stage.stage, stage.status, stage.durationMs, stage.summary);
+          appendOutput(`[stage] ${stage.stage}: ${stage.status} (${stage.durationMs ?? 0}ms)`);
+        });
       }
 
-      setOodaProgress(3);
-      appendOutput('[ooda] Act: pipeline complete.');
+      appendOutput(`[plan] ${result.title || 'Precision workflow'} prepared as ${result.taskId || 'unknown task'}.`);
+      if (result.livingArchitectureGraph?.versionId) {
+        appendOutput(`[artifact] Living Architecture Graph version: ${result.livingArchitectureGraph.versionId}`);
+      }
+      if (Array.isArray(result.artifacts) && result.artifacts.length) {
+        result.artifacts.forEach((artifact) => {
+          appendOutput(`[artifact] ${artifact.kind}: ${artifact.path}`);
+        });
+      }
+      appendOutput('[approval] Required before render, codegen, file, terminal, or service execution.');
+      succeeded = true;
     } catch (err) {
-      appendOutput(`[error] Pipeline failed: ${err instanceof Error ? err.message : String(err)}`);
+      appendOutput(`[error] Workflow failed: ${err instanceof Error ? err.message : String(err)}`);
+      renderStage('planning', 'failed', null, err instanceof Error ? err.message : String(err));
     } finally {
       pipelineRunning = false;
-      if (btn) { btn.disabled = false; btn.innerHTML = '<span class="precision-icon">&#9889;</span> Precision Orchestration &mdash; Full Pipeline'; }
-      setTimeout(() => setOodaProgress(-1), 3000);
+      if (btn) { btn.disabled = false; btn.innerHTML = DEFAULT_BUTTON_HTML; }
+      if (!succeeded) setTimeout(() => setOodaProgress(-1), 3000);
     }
   }
 

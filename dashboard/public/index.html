@@ -95,18 +95,18 @@
         <h2>Dashboard</h2>
         <p class="session-hint session-hint-dash" id="session-hint-dash" hidden>Close every Opseeq tab to end this session.</p>
         <div class="view-tabs" role="tablist" aria-label="Dashboard views">
-          <button class="view-tab active" data-view-target="overview" type="button">Overview</button>
-          <button class="view-tab" data-view-target="precision" type="button">Precision Orchestration</button>
-          <button class="view-tab" data-view-target="graph" type="button">Living Graph</button>
-          <button class="view-tab" data-view-target="nemoclaw" type="button">NemoClaw</button>
-          <button class="view-tab" data-view-target="models" type="button">Models</button>
-          <button class="view-tab" data-view-target="v25systems" type="button">v2.5 Systems</button>
+          <button class="view-tab active" id="tab-overview" role="tab" aria-selected="true" aria-controls="panel-overview" tabindex="0" data-view-target="overview" type="button">Overview</button>
+          <button class="view-tab" id="tab-precision" role="tab" aria-selected="false" aria-controls="panel-precision" tabindex="-1" data-view-target="precision" type="button">Precision Orchestration</button>
+          <button class="view-tab" id="tab-graph" role="tab" aria-selected="false" aria-controls="panel-graph" tabindex="-1" data-view-target="graph" type="button">Living Graph</button>
+          <button class="view-tab" id="tab-nemoclaw" role="tab" aria-selected="false" aria-controls="panel-nemoclaw" tabindex="-1" data-view-target="nemoclaw" type="button">NemoClaw</button>
+          <button class="view-tab" id="tab-models" role="tab" aria-selected="false" aria-controls="panel-models" tabindex="-1" data-view-target="models" type="button">Models</button>
+          <button class="view-tab" id="tab-v25systems" role="tab" aria-selected="false" aria-controls="panel-v25systems" tabindex="-1" data-view-target="v25systems" type="button">v2.5 Systems</button>
         </div>
       </div>
       <span class="version-badge" id="version-badge">v--</span>
     </div>
 
-    <section class="view-panel view-panel-active" data-view="overview">
+    <section class="view-panel view-panel-active" id="panel-overview" role="tabpanel" aria-labelledby="tab-overview" tabindex="0" data-view="overview">
       <!-- App cards -->
       <div class="cards">
         <!-- Mermate -->
@@ -186,7 +186,7 @@
         </div>
         <div class="events-panel">
           <h4>Recent Events</h4>
-          <div id="events-list">
+          <div id="events-list" aria-live="polite">
             <div class="event-line" style="color:var(--text-dim);">Waiting for events...</div>
           </div>
         </div>
@@ -197,21 +197,22 @@
         <h3>Connect a New App</h3>
         <p style="font-size:13px; color:var(--text-muted); margin-bottom:16px;">Paste a local repo path to generate the Opseeq connection config.</p>
         <div class="plugin-input-row">
+          <label class="sr-only" for="plugin-path">Local repo path</label>
           <input type="text" class="plugin-input" id="plugin-path" placeholder="/Users/you/Desktop/developer/my-app">
           <button class="btn-primary" style="padding:10px 20px; font-size:13px;" id="btn-connect">Generate</button>
         </div>
-        <div class="plugin-output" id="plugin-output"></div>
+        <div class="plugin-output" id="plugin-output" role="status" aria-live="polite"></div>
       </div>
     </section>
 
     <!-- ── Precision Orchestration ──────────────────────────────── -->
-    <section class="view-panel" data-view="precision" hidden>
+    <section class="view-panel" id="panel-precision" role="tabpanel" aria-labelledby="tab-precision" tabindex="0" data-view="precision" hidden>
       <div class="precision-hero">
         <button class="btn-precision" id="btn-precision-run" type="button">
-          <span class="precision-icon">&#9889;</span>
-          Precision Orchestration &mdash; Full Pipeline
+          <span class="precision-icon" aria-hidden="true">&#9889;</span>
+          Plan Precision Workflow
         </button>
-        <p class="precision-sub">Mermate MAX &rarr; Lucidity Cleanup &rarr; TLA+ &rarr; TypeScript &rarr; Rust &rarr; .app</p>
+        <p class="precision-sub">Plan first. Render, codegen, file, terminal, and service actions require explicit human approval.</p>
       </div>
 
       <div class="precision-split">
@@ -219,6 +220,7 @@
         <div class="precision-pane precision-white">
           <div class="pane-header"><span class="pane-dot white"></span> White Pane &mdash; Planning</div>
           <div class="precision-idea-box" id="precision-idea-box">
+            <label class="sr-only" for="precision-input">Precision workflow intent</label>
             <textarea class="precision-textarea" id="precision-input" placeholder="Drop an idea, paste markdown, or drag a .mmd file here..."></textarea>
           </div>
           <div class="ooda-ring-wrapper">
@@ -235,18 +237,22 @@
               <span class="ooda-step" id="ooda-act">Act</span>
             </div>
           </div>
-          <div class="precision-plan" id="precision-plan">
-            <div class="empty-state">Plan will appear after pipeline starts.</div>
+          <div class="precision-plan" id="precision-plan" aria-live="polite">
+            <div class="empty-state">Plan will appear after the workflow is prepared.</div>
           </div>
         </div>
 
-        <!-- Black Pane: Execution -->
+        <!-- Black Pane: Approval and execution -->
         <div class="precision-pane precision-black">
-          <div class="pane-header"><span class="pane-dot black"></span> Black Pane &mdash; Execution</div>
-          <div class="precision-stages" id="precision-stages">
-            <div class="empty-state">Stages appear as the pipeline runs.</div>
+          <div class="pane-header"><span class="pane-dot black"></span> Black Pane &mdash; Approval and Execution</div>
+          <div class="precision-approval-card" id="precision-approval-summary" aria-live="polite">
+            <span class="state-pill warn">Approval required</span>
+            <p>No effectful action has been approved. Prepare a plan to inspect proposed tools, files, services, and artifacts.</p>
           </div>
-          <pre class="terminal-output precision-output" id="precision-output">Awaiting pipeline execution...</pre>
+          <div class="precision-stages" id="precision-stages" aria-live="polite">
+            <div class="empty-state">Approval and stage status appear after planning.</div>
+          </div>
+          <pre class="terminal-output precision-output" id="precision-output" aria-live="polite" aria-label="Precision workflow log">Awaiting workflow plan...</pre>
         </div>
       </div>
 
@@ -260,15 +266,16 @@
           </div>
         </div>
         <div class="plugin-input-row">
+          <label class="sr-only" for="crossrepo-search-input">Search connected repositories</label>
           <input type="text" class="plugin-input" id="crossrepo-search-input" placeholder="Search axioms, lemmas, artifacts...">
           <button class="btn-primary" style="padding:10px 20px; font-size:13px;" id="btn-crossrepo-search">Search</button>
         </div>
-        <div class="crossrepo-results" id="crossrepo-results"></div>
+        <div class="crossrepo-results" id="crossrepo-results" aria-live="polite"></div>
       </div>
     </section>
 
     <!-- ── Living Graph ──────────────────────────────── -->
-    <section class="view-panel" data-view="graph" hidden>
+    <section class="view-panel" id="panel-graph" role="tabpanel" aria-labelledby="tab-graph" tabindex="0" data-view="graph" hidden>
       <div class="nemoclaw-grid">
         <div class="card">
           <div class="card-header">
@@ -312,7 +319,7 @@
             <div class="card-subtitle">Visual representation of the Living Architecture Graph (Mermaid diagram)</div>
           </div>
         </div>
-        <div class="graph-viewer" id="graph-viewer">
+        <div class="graph-viewer" id="graph-viewer" aria-live="polite">
           <div class="empty-state">Click &ldquo;Refresh Index&rdquo; to load the graph visualization.</div>
         </div>
       </div>
@@ -331,7 +338,7 @@
       </div>
     </section>
 
-    <section class="view-panel" data-view="nemoclaw" hidden>
+    <section class="view-panel" id="panel-nemoclaw" role="tabpanel" aria-labelledby="tab-nemoclaw" tabindex="0" data-view="nemoclaw" hidden>
       <div class="nemoclaw-grid">
         <div class="card">
           <div class="card-header">
@@ -392,7 +399,7 @@
             <div class="card-subtitle">Runs <code>nemoclaw &lt;sandbox&gt; status</code> and keeps the output in the dashboard</div>
           </div>
         </div>
-        <pre class="terminal-output" id="nemoclaw-inspector">Select a sandbox and run Inspect to load its live status here.</pre>
+        <pre class="terminal-output" id="nemoclaw-inspector" aria-live="polite">Select a sandbox and run Inspect to load its live status here.</pre>
       </div>
 
       <div class="card">
@@ -410,8 +417,9 @@
           <button class="btn-open" type="button" id="btn-terminal-clear">Clear</button>
           <span class="state-pill muted" id="nemoclaw-terminal-state">Connecting…</span>
         </div>
-        <pre class="terminal-output terminal-live" id="nemoclaw-terminal-screen">No terminal session started.</pre>
+        <pre class="terminal-output terminal-live" id="nemoclaw-terminal-screen" aria-live="polite" aria-label="Embedded terminal output">No terminal session started.</pre>
         <div class="terminal-input-row">
+          <label class="sr-only" for="nemoclaw-terminal-input">Terminal input</label>
           <input type="text" class="plugin-input terminal-input" id="nemoclaw-terminal-input" placeholder="Type input for the active terminal session and press Enter">
           <button class="btn-open" type="button" id="btn-nemoclaw-terminal-send">Send</button>
           <button class="btn-open" type="button" id="btn-nemoclaw-terminal-interrupt">Ctrl+C</button>
@@ -420,7 +428,7 @@
     </section>
 
     <!-- ── v2.5 Systems ─────────────────────────────────────── -->
-    <section class="view-panel" data-view="v25systems" hidden>
+    <section class="view-panel" id="panel-v25systems" role="tabpanel" aria-labelledby="tab-v25systems" tabindex="0" data-view="v25systems" hidden>
       <div class="nemoclaw-grid">
         <!-- Absorption Status -->
         <div class="card">
@@ -527,7 +535,7 @@
       </div>
     </section>
 
-    <section class="view-panel" data-view="models" hidden>
+    <section class="view-panel" id="panel-models" role="tabpanel" aria-labelledby="tab-models" tabindex="0" data-view="models" hidden>
       <div class="nemoclaw-grid">
         <div class="card">
           <div class="card-header">

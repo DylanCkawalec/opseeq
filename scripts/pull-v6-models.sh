@@ -6,13 +6,13 @@
 #
 # Usage: bash scripts/pull-v6-models.sh
 #
-# This script pulls qwen3-coder:30b and deepseek-r1:32b with automatic
+# This script pulls the default large coding model with automatic
 # retry and resume support. Run when network connectivity is good.
 # Ollama resumes from partial downloads, so safe to interrupt and re-run.
 
 set -euo pipefail
 
-MODELS=("qwen3-coder:30b" "deepseek-r1:32b")
+MODELS=("qwen3.5:35b-a3b-coding-mxfp8")
 MAX_RETRIES=50
 RETRY_DELAY=10
 
@@ -36,4 +36,4 @@ echo ""
 echo "=== Model verification ==="
 ollama list
 echo ""
-echo "Expected models: gpt-oss:20b, nemotron-3-nano:4b, kimi-k2.5:cloud, qwen3-coder:30b, deepseek-r1:32b"
+echo "Expected Ollama (bare metal / SeeQ): gpt-oss:20b, nemotron-3-nano:4b, qwen3.5:35b-a3b-coding-mxfp8 (+ optional qwen3.5:9b, kimi-k2.5:cloud per host)"

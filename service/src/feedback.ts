@@ -12,7 +12,9 @@
  * **Corollary C1 — Optional routing** — `provider-resolution` may consult `getBestProvider` only when
  * `OPSEEQ_ADAPTIVE_ROUTING=true` and the leader can serve the requested model.
  * **Lemma L1 — Artifact ring** — Recent inference artifacts are stored in a fixed-size ring buffer
- * for `/api/artifacts` and status counts.
+ * (`ARTIFACT_RING_SIZE`) for `/api/artifacts` and status; entries are appended from successful
+ * **non-streaming** `routeInference` (kernel and Node provider paths). Streaming chat completions
+ * do not enqueue artifacts.
  * **Behavioral contract** — `recordSuccess` / `recordFailure` are side-effecting; `getFeedbackSnapshot`
  * is read-only and safe to call from any route.
  * **Tracing invariant** — Provider keys are logical names (e.g. `openai`, `kernel`), not API base URLs.

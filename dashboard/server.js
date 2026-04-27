@@ -18,6 +18,7 @@ const {
 } = require('./lib/local-control');
 
 const PORT = parseInt(process.env.OPSEEQ_DASHBOARD_PORT || '7070', 10);
+const HOST = process.env.OPSEEQ_DASHBOARD_HOST || '127.0.0.1';
 const GATEWAY = process.env.OPSEEQ_GATEWAY_URL || 'http://127.0.0.1:9090';
 const SESSION_SHUTDOWN = process.env.OPSEEQ_SESSION_SHUTDOWN === '1';
 const OPSEEQ_ROOT = path.resolve(__dirname, '..');
@@ -421,10 +422,10 @@ server.on('error', (err) => {
   process.exit(1);
 });
 
-server.listen(PORT, () => {
+server.listen(PORT, HOST, () => {
   console.log('');
   console.log('  Opseeq Dashboard');
-  console.log('  http://localhost:' + PORT);
+  console.log('  http://' + HOST + ':' + PORT);
   console.log('  Gateway: ' + GATEWAY);
   console.log(
     SESSION_SHUTDOWN

@@ -119,7 +119,7 @@ describe("local inference helpers", () => {
 
   it("prefers the default ollama model when present", () => {
     expect(
-      getDefaultOllamaModel(() => "qwen3:32b  abc  20 GB  now\nqwen3-coder:30b  def  18 GB  now")
+      getDefaultOllamaModel(() => "qwen3:32b  abc  20 GB  now\nqwen3.5:35b-a3b-coding-mxfp8  def  37 GB  now")
     ).toBe(DEFAULT_OLLAMA_MODEL);
   });
 

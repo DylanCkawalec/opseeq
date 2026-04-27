@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Opseeq Copilot</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header>
+      <h1>Opseeq Copilot <small>QGoT-backed orchestrator</small></h1>
+      <div id="bridge-indicator" class="bridge-indicator" aria-live="polite">
+        <span class="dot warn" aria-hidden="true"></span> checking status
+      </div>
+      <nav id="nav">
+        <button data-tab="prompt" class="active">Prompt</button>
+        <button data-tab="runs">Runs</button>
+        <button data-tab="models">Models</button>
+        <button data-tab="status">Status</button>
+      </nav>
+    </header>
+    <main>
+      <section id="tab-prompt">
+        <div class="prompt-grid">
+          <div class="panel">
+            <label for="prompt">Copilot request</label>
+            <textarea id="prompt" rows="6" placeholder="What should the copilot do?"></textarea>
+            <div class="actions">
+              <button id="submit">Submit</button>
+              <span class="muted">plan → verify → execute, with trace events below</span>
+            </div>
+          </div>
+          <aside class="panel status-island" aria-labelledby="qgot-status-heading">
+            <div class="island-head">
+              <h2 id="qgot-status-heading">QGoT readiness</h2>
+              <button id="status-refresh" class="secondary" type="button">refresh</button>
+            </div>
+            <div id="qgot-status" aria-live="polite"></div>
+          </aside>
+        </div>
+        <div id="live" class="timeline" aria-live="polite">
+          <p class="muted">Submit a prompt to start a trace.</p>
+        </div>
+      </section>
+      <section id="tab-runs" hidden>
+        <div id="runs"></div>
+      </section>
+      <section id="tab-models" hidden>
+        <div id="models"></div>
+      </section>
+      <section id="tab-status" hidden>
+        <div id="status-summary" aria-live="polite"></div>
+        <div id="protocol-checks"></div>
+        <details class="raw-details">
+          <summary>Raw status payload</summary>
+          <pre id="status-detail"></pre>
+        </details>
+      </section>
+    </main>
+    <script type="module" src="/main.ts"></script>
+  </body>
+</html>

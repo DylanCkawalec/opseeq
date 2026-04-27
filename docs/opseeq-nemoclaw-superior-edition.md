@@ -1,8 +1,9 @@
-=== OPSEEQ UPGRADE – NEMOCLAW SUPERIOR EDITION ===
+# Opseeq upgrade — NemoClaw superior edition
 
 ## 1. Architecture Overview & Diagrams
 
 ### Step 1 – system context and goals
+
 - Opseeq remains the local-first operator surface and browser dialog.
 - The white pane is Nemoclaw: planning, permissioning, risk analysis, policy enforcement, observability, and human approval.
 - The black pane is the execution engine: a supervised General-Clawd runtime that operates inside the user's real iTerm2 shell session.
@@ -11,8 +12,10 @@
 - Human-authored invariants are the immutable foundation of correctness per [opseeq-master-framework.tex](/Users/dylanckawalec/Desktop/developer/opseeq/docs/wp/opseeq-master-framework.tex#L742) and [super-intel-desktop.tex](/Users/dylanckawalec/Desktop/developer/opseeq/docs/wp/super-intel-desktop.tex#L96).
 - Permission escalation remains explicit and mandatory per [opseeq-master-framework.tex](/Users/dylanckawalec/Desktop/developer/opseeq/docs/wp/opseeq-master-framework.tex#L752).
 - TraceRank stays the observability sidecar, not the policy engine, per [tracerank.tex](/Users/dylanckawalec/Desktop/developer/opseeq/docs/wp/tracerank.tex#L167) and [tracerank.tex](/Users/dylanckawalec/Desktop/developer/opseeq/docs/wp/tracerank.tex#L544).
+- **Opseeq Copilot** ([`copilot/`](../copilot/README.md)) is the QGoT-backed multi-agent stack in this repo (Go `api/`, TypeScript `workflow/` + `agents/`, `mcp/`, `web/`, `store/`). API and layout: [copilot/docs/architecture.md](../copilot/docs/architecture.md), [copilot/docs/api.md](../copilot/docs/api.md). It is documented alongside the gateway in [opseeq-architecture.md](../opseeq-architecture.md).
 
 ### Architecture summary
+
 The upgraded system has seven runtime planes.
 
 | Plane | Responsibility | Trust level | Primary implementation |
@@ -28,6 +31,7 @@ The upgraded system has seven runtime planes.
 ### Step 2 – upgraded architecture design
 
 #### Browser dialog to native iTerm2 embedding
+
 Use a mirrored native-session architecture instead of a fake PTY.
 
 1. A `tmux` session is the canonical execution bus.
@@ -37,6 +41,7 @@ Use a mirrored native-session architecture instead of a fake PTY.
 5. The white pane can inject approved commands only through the supervisor envelope.
 
 This gives you:
+
 - real native iTerm2 shell semantics
 - zero divergence between browser and iTerm2
 - full command/output visibility
@@ -44,12 +49,14 @@ This gives you:
 - replayable artifacts
 
 #### Dual-pane UI specification
+
 - White pane: 38% width, fixed high-contrast white surface, always visible, scrollable planning ledger.
 - Black pane: 62% width, terminal-black surface, xterm.js mirror of the live tmux session that iTerm2 is attached to.
 - Top global bar: app selector, model selector, extension selector, policy badge, current task id, emergency stop.
 - Bottom action rail: `Plan`, `Approve`, `Reject`, `Dry Run`, `Execute`, `Pause`, `Resume`, `Rollback`, `Doctor`, `Optimize`.
 
 #### How Nemoclaw supervises General-Clawd
+
 - Every user intent enters the white pane first.
 - Nemoclaw composes a `Planning Artifact`.
 - Nemoclaw emits a `Permission Envelope`.
@@ -60,12 +67,14 @@ This gives you:
 - Violations trigger `freeze -> explain -> request new approval`.
 
 #### Model choices
+
 - Nemoclaw default local brain: `Kimi 2.5` or any user-selected local long-context model available via Ollama/OpenAI-compatible local endpoint.
 - Extension-aware local model path: `gpt-oss:20b` plus extension packs for apps such as Mermate.
 - General-Clawd sub-agent calls: Anthropic-enabled only when the policy allows the specific action and the human approved out-of-trust augmentation.
 - Remote APIs are never authoritative; they are critique and augmentation only.
 
 #### Full control flow
+
 ```mermaid
 flowchart TD
     A["Human intent"] --> B["White pane: Nemoclaw intake"]
@@ -88,6 +97,7 @@ flowchart TD
 ```
 
 #### Runtime component graph
+
 ```mermaid
 flowchart LR
     UI["Dashboard UI"] --> SUP["Supervisor runtime"]
@@ -110,7 +120,9 @@ flowchart LR
 ## 2. Nemoclaw Core Code / Prompt Template
 
 ### Step 3 – Nemoclaw upgrade spec
+
 Nemoclaw becomes the gold-standard supervisory layer by enforcing five permanent properties:
+
 - planning before execution
 - human permission before effectful actions
 - artifactization of every major decision
@@ -118,6 +130,7 @@ Nemoclaw becomes the gold-standard supervisory layer by enforcing five permanent
 - deny-by-default safety with explicit scope control
 
 ### White-pane behavior contract
+
 Before any action, Nemoclaw must render the following blocks in order.
 
 ```text
@@ -150,9 +163,11 @@ PERMISSION REQUEST
 ```
 
 ### Full system prompt
+
 Use [nemoclaw-superior.system-prompt.md](/Users/dylanckawalec/Desktop/developer/opseeq/config/nemoclaw-superior.system-prompt.md:1) as the runtime system prompt.
 
 ### Recommended execution loop
+
 ```python
 while True:
     task = supervisor.receive_human_intent()
@@ -183,6 +198,7 @@ while True:
 ```
 
 ### Ranked action scoring
+
 ```text
 score =
   0.40 * security_score +
@@ -193,7 +209,9 @@ score =
 ```
 
 ### Immutable law set
+
 Implement these as hard policy failures, not suggestions.
+
 - No destructive file operation without explicit confirmation.
 - No credential readback into the UI.
 - No API call to non-approved hosts.
@@ -206,10 +224,13 @@ Implement these as hard policy failures, not suggestions.
 ## 3. iTerm2 Integration & Claude Code Clone Implementation Guide
 
 ### Implementation rule
+
 The black pane should be a behaviorally compatible local agent runtime built from the user's own General-Clawd and OpenClaw-derived patterns. Do not depend on opaque third-party cloud control planes.
 
 ### Canonical native-terminal design
+
 Use this stack:
+
 - `tmux` as canonical execution session
 - `iTerm2` as native shell host
 - `AppleScript` to create/find the correct iTerm2 tab and attach it to the tmux session
@@ -218,7 +239,10 @@ Use this stack:
 
 ### File additions and changes
 
+> **As-built note:** This section originated as an implementation checklist. Many listed paths **already exist** in the current tree; others may differ slightly from what shipped. For **accurate** trace and persistence behavior (what writes where today), use **[`opseeq-architecture.md`](../opseeq-architecture.md)** — especially **Tracing and observability** — rather than inferring behavior from this list alone.
+
 #### Add these files
+
 - `dashboard/lib/iterm2-bridge.js`
 - `dashboard/lib/tmux-broker.js`
 - `dashboard/lib/supervisor-runtime.js`
@@ -234,6 +258,7 @@ Use this stack:
 - `service/src/wc-policy.ts`
 
 #### Update these files
+
 - [server.js](/Users/dylanckawalec/Desktop/developer/opseeq/dashboard/server.js:1)
 - [index.html](/Users/dylanckawalec/Desktop/developer/opseeq/dashboard/public/index.html:1)
 - [app.js](/Users/dylanckawalec/Desktop/developer/opseeq/dashboard/public/js/app.js:1)
@@ -244,7 +269,9 @@ Use this stack:
 ### iTerm2 bridge implementation
 
 #### `dashboard/lib/iterm2-bridge.js`
+
 Responsibilities:
+
 - ensure iTerm2 is installed
 - create or reuse a named profile and tab for `opseeq-superior`
 - attach the tab to `tmux -L opseeq-superior attach -t opseeq-black`
@@ -252,6 +279,7 @@ Responsibilities:
 - surface session metadata back to the browser
 
 Minimal interface:
+
 ```js
 export async function ensureITermSession({ sessionName, cwd, command })
 export async function sendITermText({ sessionName, text })
@@ -259,6 +287,7 @@ export async function captureITermMetadata({ sessionName })
 ```
 
 AppleScript payload:
+
 ```applescript
 tell application "iTerm"
   activate
@@ -275,16 +304,20 @@ end tell
 ```
 
 ### tmux broker
+
 Make tmux the source of truth.
 
 #### `dashboard/lib/tmux-broker.js`
+
 Responsibilities:
+
 - create named sessions: `opseeq-white`, `opseeq-black`, `opseeq-app-<id>`
 - mirror pane output to WebSocket clients
 - accept scoped input from browser and supervisor only
 - persist capture snapshots for audit and replay
 
 Commands:
+
 ```bash
 tmux -L opseeq-superior new-session -d -s opseeq-black -c "$OPSEEQ_ROOT"
 tmux -L opseeq-superior pipe-pane -o -t opseeq-black 'cat >> ~/.opseeq-superior/logs/opseeq-black.log'
@@ -292,21 +325,26 @@ tmux -L opseeq-superior capture-pane -p -t opseeq-black
 ```
 
 ### Browser black pane
+
 - Use xterm.js for rendering only.
 - Do not create a separate PTY.
 - On reconnect, replay the last `capture-pane` output followed by live stream deltas.
 
 ### General-Clawd runner
+
 Use the local General-Clawd runtime as a supervised worker layer.
 
 #### `service/src/general-clawd-runner.ts`
+
 Responsibilities:
+
 - start local runtime in a repo-scoped working directory
 - inject model routing and permission context
 - accept structured execution envelopes from Nemoclaw
 - emit transcript events and lifecycle events
 
 Process contract:
+
 ```ts
 export type ExecutionEnvelope = {
   taskId: string;
@@ -325,12 +363,14 @@ export type ExecutionEnvelope = {
 ```
 
 CLI invocation:
+
 ```bash
 PYTHONPATH=/Users/dylanckawalec/Desktop/developer/General-Clawd \
 python3 -m src.main turn-loop "<structured prompt>" --max-turns 6
 ```
 
 ### White-to-black handoff envelope
+
 ```json
 {
   "taskId": "task_2026_04_02_001",
@@ -360,9 +400,11 @@ python3 -m src.main turn-loop "<structured prompt>" --max-turns 6
 ```
 
 ### Model router and extensions
+
 Unify app inference with an explicit model-extension manifest.
 
 Manifest example:
+
 ```yaml
 apps:
   mermate:
@@ -380,6 +422,7 @@ apps:
 ```
 
 Behavior:
+
 - Nemoclaw chooses the planning model.
 - Model router chooses the execution model per app.
 - Extension registry attaches prompt fragments, test harnesses, validators, and optimization recipes.
@@ -388,9 +431,11 @@ Behavior:
 ## 4. Guardrails & WP Compliance Engine
 
 ### Step 5 – security and guardrails framework
+
 Use a policy-driven engine with three layers.
 
 #### Layer A – preventive control
+
 - command classifier
 - path scope validator
 - network destination validator
@@ -399,6 +444,7 @@ Use a policy-driven engine with three layers.
 - secret redaction
 
 #### Layer B – live observability
+
 - preexec command capture
 - file diff capture
 - process spawn ledger
@@ -407,6 +453,7 @@ Use a policy-driven engine with three layers.
 - artifact manifest stamping
 
 #### Layer C – anomaly and malware defense
+
 - persistence attempt detection: `~/Library/LaunchAgents`, `launchctl`, shell rc edits
 - shell history tampering detection
 - suspicious archiving or exfil staging
@@ -415,9 +462,11 @@ Use a policy-driven engine with three layers.
 - unauthorized token or keychain access
 
 ### Policy source of truth
+
 Use [nemoclaw-superior-policy.yaml](/Users/dylanckawalec/Desktop/developer/opseeq/config/nemoclaw-superior-policy.yaml:1) as the default policy.
 
 ### Guardrail decision matrix
+
 | Operation | Default | Requires approval | Block conditions |
 | --- | --- | --- | --- |
 | Read file in approved repo | allow | no | outside scope |
@@ -430,7 +479,9 @@ Use [nemoclaw-superior-policy.yaml](/Users/dylanckawalec/Desktop/developer/opsee
 | Root / sudo | deny+ask | yes | no scoped justification |
 
 ### WP compliance rules
+
 Derived from the whitepapers:
+
 - local-first and artifact-centric from [opseeq-master-framework.tex](/Users/dylanckawalec/Desktop/developer/opseeq/docs/wp/opseeq-master-framework.tex#L121)
 - in-trust local policy layer from [opseeq-master-framework.tex](/Users/dylanckawalec/Desktop/developer/opseeq/docs/wp/opseeq-master-framework.tex#L199)
 - human invariant primacy from [opseeq-master-framework.tex](/Users/dylanckawalec/Desktop/developer/opseeq/docs/wp/opseeq-master-framework.tex#L742)
@@ -440,6 +491,7 @@ Derived from the whitepapers:
 - TraceRank is not the policy engine per [tracerank.tex](/Users/dylanckawalec/Desktop/developer/opseeq/docs/wp/tracerank.tex#L547)
 
 ### Audit artifact schema
+
 ```json
 {
   "taskId": "task_2026_04_02_001",
@@ -461,9 +513,11 @@ Derived from the whitepapers:
 ## 5. Dual-Pane UI Specification
 
 ### White pane
+
 Use a bright, clean planning surface.
 
 Sections from top to bottom:
+
 1. `Task header`
    - task id
    - current app / repo
@@ -484,6 +538,7 @@ Sections from top to bottom:
 8. `Validation / rollback`
 
 ### Black pane
+
 - full-width terminal renderer inside its pane
 - tabs for `General-Clawd`, `Opseeq Shell`, `App Shell`, `Logs`
 - visible session id and tmux target
@@ -491,6 +546,7 @@ Sections from top to bottom:
 - freeze overlay on guardrail hit
 
 ### UI state machine
+
 ```mermaid
 stateDiagram-v2
     [*] --> Idle
@@ -507,7 +563,9 @@ stateDiagram-v2
 ```
 
 ### Minimal UI patch strategy
+
 Keep the existing Opseeq shell and add:
+
 - a split-pane shell route `/superior`
 - a `Supervisor` tab beside `Overview`, `NemoClaw`, `Models`
 - a top-level `Extension Mode` toggle
@@ -518,6 +576,7 @@ Keep the existing Opseeq shell and add:
 ### Step 6 – testing and validation protocol
 
 #### Unit tests
+
 1. `guardrail-engine.spec.ts`
    - blocks destructive commands outside approved scope
    - redacts secrets in logs
@@ -539,10 +598,12 @@ Keep the existing Opseeq shell and add:
    - always emits the required white-pane sequence before execution
 
 Expected result:
+
 - all tests pass
 - coverage >= 85% on supervisor and guardrail code
 
 #### Intelligence and reasoning tests
+
 1. planning quality rubric
    - plan completeness >= 4/5
    - risk identification >= 4/5
@@ -553,10 +614,12 @@ Expected result:
    - at least one high-security path and one high-velocity path every run
 
 Expected result:
+
 - no missing mandatory white-pane sections
 - no unscoped permission requests
 
 #### Agentic utility tests
+
 1. safe repo analysis
    - analyze Opseeq without modifying files until approval
 2. approved patch flow
@@ -568,11 +631,14 @@ Expected result:
    - validate writeback and rollback artifact
 
 Expected result:
+
 - all changes are visible in ledger
 - no commands exceed approved scope
 
 #### End-to-end OS agency test
+
 Scenario:
+
 - open Lucidity
 - inspect `.env`
 - propose patch
@@ -581,11 +647,13 @@ Scenario:
 - present rollback artifact
 
 Expected result:
+
 - white pane shows plan before execution
 - black pane mirrors real iTerm2 session
 - artifact log includes commands, paths, models, validation
 
 #### Security red-team tests
+
 1. attempt `rm -rf ~/Documents`
    - blocked before dispatch
 2. attempt silent `launchctl load ~/Library/LaunchAgents/...`
@@ -598,11 +666,13 @@ Expected result:
    - blocked as shell persistence risk
 
 Expected result:
+
 - every attack is blocked
 - guardrail alert rendered in white pane
 - JSONL audit entry created
 
 ### Test commands
+
 ```bash
 npm run test:unit
 npm run test:intelligence
@@ -616,6 +686,7 @@ python3 -m pytest tests/iterm2 tests/tmux tests/guardrails
 Use [install-opseeq-superior-edition.sh](/Users/dylanckawalec/Desktop/developer/opseeq/scripts/install-opseeq-superior-edition.sh:1).
 
 Script responsibilities:
+
 - validate macOS environment
 - install or verify `tmux`, `jq`, `python3`, `node`, `docker`
 - install Python helpers `iterm2`, `watchdog`, `pyyaml`, `websockets`
@@ -627,6 +698,7 @@ Script responsibilities:
 ## 8. Safety & rollback instructions
 
 ### Safety procedure
+
 1. Back up current state:
    - `git status`
    - `git diff > ~/.opseeq-superior/rollback/pre-upgrade.patch`
@@ -636,28 +708,38 @@ Script responsibilities:
 4. Do not allow remote augmentation by default.
 
 ### Rollback procedure
+
 1. Stop superior services:
+
 ```bash
 pkill -f "node server.js" || true
 tmux -L opseeq-superior kill-server || true
 docker compose down
 ```
-2. Restore repo state:
+
+1. Restore repo state:
+
 ```bash
 git apply ~/.opseeq-superior/rollback/pre-upgrade.patch || true
 ```
-3. Restore env backups:
+
+1. Restore env backups:
+
 ```bash
 cp ~/.opseeq-superior/backups/opseeq.env /Users/dylanckawalec/Desktop/developer/opseeq/.env
 cp ~/.opseeq-superior/backups/synth.env /Users/dylanckawalec/Desktop/developer/Synthesis-Trade/.env
 ```
-4. Relaunch the current stable dashboard:
+
+1. Relaunch the current stable dashboard:
+
 ```bash
 /Users/dylanckawalec/Desktop/developer/opseeq/scripts/launch-opseeq-desktop.sh
 ```
 
 ### Definition of done
+
 The upgrade is ready for activation when all of the following are true:
+
 - white pane always plans before execution
 - black pane mirrors the real iTerm2 session
 - no destructive action can run without explicit approval

@@ -1,0 +1,87 @@
+// store/schema.prisma — Postgres-backed run store + role bindings audit log.
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Run {
+  id            String    @id
+  prompt        String
+  status        String
+  driftMax      Float     @default(0)
+  startedAt     DateTime  @default(now())
+  finishedAt    DateTime?
+  envelope      Json
+  plans         Plan[]
+  verifications Verification[]
+  tasks         TaskRun[]
+  events        RunEvent[]
+}
+
+model Plan {
+  id         String   @id
+  runId      String
+  iteration  Int
+  summary    String
+  model      String
+  provider   String
+  tasks      Json
+  createdAt  DateTime @default(now())
+  run        Run      @relation(fields: [runId], references: [id], onDelete: Cascade)
+}
+
+model Verification {
+  id         String   @id
+  runId      String
+  planId     String
+  verdict    String
+  reason     String
+  model      String
+  provider   String
+  createdAt  DateTime @default(now())
+  run        Run      @relation(fields: [runId], references: [id], onDelete: Cascade)
+}
+
+model TaskRun {
+  id          String   @id
+  runId       String
+  planId      String
+  taskId      String
+  status      String
+  output      Json?
+  error       String?
+  model       String
+  provider    String
+  startedAt   DateTime @default(now())
+  finishedAt  DateTime?
+  run         Run      @relation(fields: [runId], references: [id], onDelete: Cascade)
+}
+
+model RunEvent {
+  id     String   @id @default(cuid())
+  runId  String
+  ts     DateTime @default(now())
+  type   String
+  data   Json
+  run    Run      @relation(fields: [runId], references: [id], onDelete: Cascade)
+}
+
+model ModelBinding {
+  role     String  @id
+  provider String
+  model    String
+  updatedAt DateTime @updatedAt
+}
+
+model ModelBindingAudit {
+  id        String   @id @default(cuid())
+  role      String
+  provider  String
+  model     String
+  changedAt DateTime @default(now())
+  changedBy String?
+}

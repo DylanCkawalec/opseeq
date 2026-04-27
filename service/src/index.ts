@@ -1088,8 +1088,8 @@ app.post('/api/seeq/warmup', authenticate, async (req, res) => {
 app.get('/api/seeq/roles', (_req, res) => {
   res.json({
     aliases: {
-      'role:code': { model: 'qwen3-coder:30b', provider: 'ollama', description: 'Main local coding model (TS/Rust implementation, code review)' },
-      'role:reason': { model: 'deepseek-r1:32b', provider: 'ollama', description: 'Heavy local reasoning (decomposition, synthesis, formal reasoning)' },
+      'role:code': { model: 'qwen3.5:35b-a3b-coding-mxfp8', provider: 'ollama', description: 'Main local coding model (TS/Rust implementation, code review)' },
+      'role:reason': { model: 'gpt-oss:20b', provider: 'ollama', description: 'Local reasoning on hot-tier model (decomposition, synthesis)' },
       'role:utility': { model: 'nemotron-3-nano:4b', provider: 'ollama', description: 'Fast local utility (quick completions, wrappers, transforms)' },
       'role:reference': { model: 'nvidia/nemotron-3-super-120b-a12b', provider: 'nvidia-nim', description: 'High-capacity architecture/history/formal-spec reference' },
     },
@@ -1148,7 +1148,7 @@ httpServer = app.listen(config.port, config.host, () => {
   console.log(`  Providers:    ${config.providers.map(p => `${p.name} (${p.models.length})`).join(', ') || 'none'}`);
   console.log(`  AgentOS:      SeeQ absorbed (WASM+V8 isolate VMs)`);
   console.log(`  SeeQ:         hot=[gpt-oss:20b,nano:4b] | active-large=dynamic | warm=15m`);
-  console.log(`  Roles:        code=qwen3-coder:30b | reason=deepseek-r1:32b | utility=nano:4b | ref=120b`);
+  console.log(`  Roles:        code=qwen3.5:35b-a3b-coding-mxfp8 | reason=gpt-oss:20b | utility=nano:4b | ref=120b`);
   console.log(`  Mermate:      ${MERMATE_URL}`);
   console.log(`  Synth:        ${SYNTH_URL}`);
   console.log(`  Ollama:       ${OLLAMA_URL || 'not configured'}`);

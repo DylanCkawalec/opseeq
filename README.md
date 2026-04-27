@@ -1,310 +1,198 @@
-# NVIDIA NemoClaw: Reference Stack for Running OpenClaw in OpenShell
+# Opseeq
 
-<!-- start-badges -->
-[![License](https://img.shields.io/badge/License-Apache_2.0-blue)](https://github.com/NVIDIA/NemoClaw/blob/main/LICENSE)
-[![Security Policy](https://img.shields.io/badge/Security-Report%20a%20Vulnerability-red)](https://github.com/NVIDIA/NemoClaw/blob/main/SECURITY.md)
-[![Project Status](https://img.shields.io/badge/status-alpha-orange)](https://github.com/NVIDIA/NemoClaw/blob/main/docs/about/release-notes.md)
-<!-- end-badges -->
+Opseeq is a local-first orchestration workspace for operating AI gateway routes, protocol tools, connected local apps, and a QGoT-backed copilot from a developer workstation.
 
-<!-- start-intro -->
-NVIDIA NemoClaw is an open source reference stack that simplifies running [OpenClaw](https://openclaw.ai) always-on assistants more safely.
-It installs the [NVIDIA OpenShell](https://github.com/NVIDIA/OpenShell) runtime, part of NVIDIA Agent Toolkit, which provides additional security for running autonomous agents.
-It also includes open source models such as [NVIDIA Nemotron](https://build.nvidia.com).
-<!-- end-intro -->
+The repository currently contains four distinct surfaces:
 
-> **Alpha software**
->
-> NemoClaw is available in early preview starting March 16, 2026.
-> This software is not production-ready.
-> Interfaces, APIs, and behavior may change without notice as we iterate on the design.
-> The project is shared to gather feedback and enable early experimentation.
-> We welcome issues and discussion from the community while the project evolves.
+| Surface | Path | Implemented role |
+|---|---|---|
+| Opseeq gateway | `service/` | Express service exposing OpenAI-compatible inference, `/api/*` control routes, MCP over SSE, status aggregation, app/repo actions, precision/OODA routes, Mermate/Synth proxies, AgentOS routes, and artifact/status APIs. |
+| Opseeq dashboard | `dashboard/` | Local operator UI served by Express. It proxies gateway routes, renders status and readiness cards, exposes NemoClaw/app controls, and provides WebSocket-backed terminal profiles. |
+| Opseeq Copilot | `copilot/` | Separate Go + TypeScript + Vite stack for QGoT-backed plan, verify, execute, observe, model-binding, run-history, GraphQL, SSE, and MCP workflows. |
+| NemoClaw reference stack | `bin/`, `nemoclaw/`, `nemoclaw-blueprint/`, `docs/` | Inherited/reference stack for running OpenClaw in OpenShell sandboxes. These docs and commands are not the canonical Opseeq gateway or copilot API. |
 
----
+## Product scope
 
-## Quick Start
+Opseeq coordinates local and remote AI services through explicit gateway, dashboard, and copilot boundaries:
 
-Follow these steps to get started with NemoClaw and your first sandboxed OpenClaw agent.
+- Routes chat completions and embeddings through configured providers in `service/src/config.ts` and `service/src/router.ts`.
+- Reports readiness for Ollama, configured model providers, Mermate, Synth, NemoClaw, the Living Architecture Graph, and precision orchestration assets through `GET /api/status`.
+- Exposes MCP tools from `service/src/mcp-server.ts` for status, chat, connectivity probes, model listing, Mermate/Synth actions, repo organization, precision planning, graph queries, and browser-use helpers.
+- Connects repositories and app surfaces through `POST /api/repos/connect` and `POST /api/apps/open`.
+- Runs precision/OODA planning through `POST /api/ooda/precision`; effectful execution is controlled by request flags such as `approved`, `execute`, `allowRemoteAugmentation`, and artifact options.
+- Runs QGoT copilot workflows through `copilot/`; the production Go API invokes the QGoT MCP stdio gateway configured by `QGOT_MCP_CMD` and fails closed when that command is missing or unavailable.
 
-> **ℹ️ Note**
->
-> NemoClaw creates a fresh OpenClaw instance inside the sandbox during onboarding.
+Not implemented as a single universal control plane today:
 
-<!-- start-quickstart-guide -->
+- A single database source of truth for all Opseeq state.
+- A universal approval system that wraps every gateway route.
+- A guaranteed running Mermate, Synth, Ollama, QGoT, or NemoClaw instance; those services are probed and reported as available/degraded/offline.
+- Production authorization for the dashboard itself. Keep it on loopback unless you add external controls.
 
-### Prerequisites
+## Quick start
 
-Check the prerequisites before you start to ensure you have the necessary software and hardware to run NemoClaw.
-
-#### Hardware
-
-| Resource | Minimum        | Recommended      |
-|----------|----------------|------------------|
-| CPU      | 4 vCPU         | 4+ vCPU          |
-| RAM      | 8 GB           | 16 GB            |
-| Disk     | 20 GB free     | 40 GB free       |
-
-The sandbox image is approximately 2.4 GB compressed. During image push, the Docker daemon, k3s, and the OpenShell gateway run alongside the export pipeline, which buffers decompressed layers in memory. On machines with less than 8 GB of RAM, this combined usage can trigger the OOM killer. If you cannot add memory, configuring at least 8 GB of swap can work around the issue at the cost of slower performance.
-
-#### Software
-
-| Dependency | Version                          |
-|------------|----------------------------------|
-| Linux      | Ubuntu 22.04 LTS or later |
-| Node.js    | 22.16 or later |
-| npm        | 10 or later |
-| Container runtime | Supported runtime installed and running |
-| [OpenShell](https://github.com/NVIDIA/OpenShell) | Installed |
-
-#### Container Runtime Support
-
-| Platform | Supported runtimes | Notes |
-|----------|--------------------|-------|
-| Linux | Docker | Primary supported path today |
-| macOS (Apple Silicon) | Colima, Docker Desktop | Recommended runtimes for supported macOS setups |
-| macOS | Podman | Not supported yet. NemoClaw currently depends on OpenShell support for Podman on macOS. |
-| Windows WSL | Docker Desktop (WSL backend) | Supported target path |
-
-#### macOS first-run checklist
-
-On a fresh macOS machine, install the prerequisites in this order:
-
-1. Install Xcode Command Line Tools:
-
-   ```bash
-   xcode-select --install
-   ```
-
-2. Install and start a supported container runtime:
-   - Docker Desktop
-   - Colima
-3. Run the NemoClaw installer.
-
-This avoids the two most common first-run failures on macOS:
-
-- missing developer tools needed by the installer and Node.js toolchain
-- Docker connection errors when no supported container runtime is installed or running
-
-> **💡 Tip**
->
-> For DGX Spark, follow the [DGX Spark setup guide](https://github.com/NVIDIA/NemoClaw/blob/main/spark-install.md). It covers Spark-specific prerequisites, such as cgroup v2 and Docker configuration, before running the standard installer.
-
-### Install NemoClaw and Onboard OpenClaw Agent
-
-Download and run the installer script.
-The script installs Node.js if it is not already present, then runs the guided onboard wizard to create a sandbox, configure inference, and apply security policies.
+### Gateway
 
 ```bash
-curl -fsSL https://www.nvidia.com/nemoclaw.sh | bash
+cp .env.example .env
+npm --prefix service install
+npm --prefix service run dev
 ```
 
-If you use nvm or fnm to manage Node.js, the installer may not update your current shell's PATH.
-If `nemoclaw` is not found after install, run `source ~/.bashrc` (or `source ~/.zshrc` for zsh) or open a new terminal.
+Default gateway address: `http://127.0.0.1:9090` when `OPSEEQ_HOST=127.0.0.1` and `OPSEEQ_PORT=9090` are used.
 
-When the install completes, a summary confirms the running environment:
-
-```text
-──────────────────────────────────────────────────
-Sandbox      my-assistant (Landlock + seccomp + netns)
-Model        nvidia/nemotron-3-super-120b-a12b (NVIDIA Endpoints)
-──────────────────────────────────────────────────
-Run:         nemoclaw my-assistant connect
-Status:      nemoclaw my-assistant status
-Logs:        nemoclaw my-assistant logs --follow
-──────────────────────────────────────────────────
-
-[INFO]  === Installation complete ===
-```
-
-### Chat with the Agent
-
-Connect to the sandbox, then chat with the agent through the TUI or the CLI.
-
-#### Connect to the Sandbox
-
-Run the following command to connect to the sandbox:
+Useful checks:
 
 ```bash
-nemoclaw my-assistant connect
+curl http://127.0.0.1:9090/health
+curl http://127.0.0.1:9090/api/status
+curl http://127.0.0.1:9090/v1/models
 ```
 
-This connects you to the sandbox shell `sandbox@my-assistant:~$` where you can run `openclaw` commands.
-
-#### OpenClaw TUI
-
-In the sandbox shell, run the following command to open the OpenClaw TUI, which opens an interactive chat interface.
+### Dashboard
 
 ```bash
-openclaw tui
+npm --prefix dashboard install
+OPSEEQ_GATEWAY_URL=http://127.0.0.1:9090 npm --prefix dashboard start
 ```
 
-Send a test message to the agent and verify you receive a response.
+Default dashboard address: `http://127.0.0.1:7070`.
 
-> **ℹ️ Note**
->
-> The TUI is best for interactive back-and-forth. If you need the full text of a long response such as a large code generation output, use the CLI instead.
+The dashboard server reads:
 
-#### OpenClaw CLI
+- `OPSEEQ_DASHBOARD_HOST` default `127.0.0.1`
+- `OPSEEQ_DASHBOARD_PORT` default `7070`
+- `OPSEEQ_GATEWAY_URL` default `http://127.0.0.1:9090`
 
-In the sandbox shell, run the following command to send a single message and print the response:
+### Copilot
 
 ```bash
-openclaw agent --agent main --local -m "hello" --session-id test
+cd copilot
+cp .env.example .env
+make install
+make dev
 ```
 
-This prints the complete response directly in the terminal and avoids relying on the TUI view for long output.
+Default copilot ports:
 
-### Uninstall
+- Go API: `127.0.0.1:7100`
+- Vite web UI: `127.0.0.1:7101`
+- Go API MCP proxy: `127.0.0.1:7100/mcp/rpc`, forwarded to `QGOT_MCP_CMD`
+- Optional TypeScript MCP dev server: `127.0.0.1:7102/rpc`
+- Optional QGoT HTTP service/reference surface: `127.0.0.1:7300`
+- QGoT MCP stdio command: `QGOT_MCP_CMD`
 
-To remove NemoClaw and all resources created during setup, in the terminal outside the sandbox, run:
+Run the copilot quality gate with:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/NVIDIA/NemoClaw/refs/heads/main/uninstall.sh | bash
+make qc
 ```
 
-The script removes sandboxes, the NemoClaw gateway and providers, related Docker images and containers, local state directories, and the global `nemoclaw` npm package. It does not remove shared system tooling such as Docker, Node.js, npm, or Ollama.
+## Main routes
 
-| Flag               | Effect                                              |
-|--------------------|-----------------------------------------------------|
-| `--yes`            | Skip the confirmation prompt.                       |
-| `--keep-openshell` | Leave the `openshell` binary installed.              |
-| `--delete-models`  | Also remove NemoClaw-pulled Ollama models.           |
+### Gateway routes
 
-For example, to skip the confirmation prompt:
+Implemented in `service/src/index.ts`.
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/NVIDIA/NemoClaw/refs/heads/main/uninstall.sh | bash -s -- --yes
-```
-
-<!-- end-quickstart-guide -->
-
----
-
-## How It Works
-
-NemoClaw installs the NVIDIA OpenShell runtime, then creates a sandboxed OpenClaw environment where every network request, file access, and inference call is governed by declarative policy. The `nemoclaw` CLI orchestrates the full stack: OpenShell gateway, sandbox, inference provider, and network policy.
-
-| Component        | Role                                                                                      |
-|------------------|-------------------------------------------------------------------------------------------|
-| **Plugin**       | TypeScript CLI commands for launch, connect, status, and logs.                            |
-| **Blueprint**    | Versioned Python artifact that orchestrates sandbox creation, policy, and inference setup. |
-| **Sandbox**      | Isolated OpenShell container running OpenClaw with policy-enforced egress and filesystem.  |
-| **Inference**    | Provider-routed model calls, routed through the OpenShell gateway, transparent to the agent. |
-
-The blueprint lifecycle follows four stages: resolve the artifact, verify its digest, plan the resources, and apply through the OpenShell CLI.
-
-When something goes wrong, errors may originate from either NemoClaw or the OpenShell layer underneath. Run `nemoclaw <name> status` for NemoClaw-level health and `openshell sandbox list` to check the underlying sandbox state.
-
----
-
-## Inference
-
-Inference requests from the agent never leave the sandbox directly. OpenShell intercepts every call and routes it to the provider you selected during onboarding.
-
-Supported non-experimental onboarding paths:
-
-| Provider | Notes |
+| Route | Purpose |
 |---|---|
-| NVIDIA Endpoints | Curated hosted models on `integrate.api.nvidia.com`. |
-| OpenAI | Curated GPT models plus `Other...` for manual model entry. |
-| Other OpenAI-compatible endpoint | For proxies and compatible gateways. |
-| Anthropic | Curated Claude models plus `Other...` for manual model entry. |
-| Other Anthropic-compatible endpoint | For Claude proxies and compatible gateways. |
-| Google Gemini | Google's OpenAI-compatible endpoint. |
+| `GET /health`, `GET /health/ready`, `GET /v1/health` | Gateway health/readiness. |
+| `GET /v1/models` | OpenAI-compatible model list from configured providers. |
+| `POST /v1/chat/completions` | OpenAI-compatible chat completions, including streaming. |
+| `POST /v1/embeddings` | Embedding proxy through the selected embedding provider. |
+| `GET /api/status` | Aggregated gateway, provider, app, graph, artifact, and integration status. |
+| `POST /api/chat` | Console-compatible chat wrapper over Opseeq or Ollama transport. |
+| `GET /api/artifacts` | Recent in-memory inference artifacts from `service/src/feedback.ts`. |
+| `GET /mcp`, `POST /mcp/messages` | Gateway MCP SSE transport when `OPSEEQ_MCP_ENABLED` is not `false`. |
+| `POST /api/repos/connect` | Analyze/connect a local repo through `service/src/repo-connect.ts`. |
+| `POST /api/apps/open` | Open a configured app surface through `service/src/app-launcher.ts`. |
+| `GET/POST /api/ooda/*` | Precision orchestration and Living Architecture Graph routes. |
+| `GET/POST /api/render*`, `/api/architect/*`, `/api/builder/scaffold` | Mermate proxy and pipeline routes. |
+| `GET/POST /api/nemoclaw/*` | NemoClaw status/action/default controls. |
+| `GET/POST /api/execution/*`, `/api/pipeline/*`, `/api/subagents/*`, `/api/agent-os/*` | Local execution, adaptive pipeline, subagent, and AgentOS surfaces. |
+| `GET/POST /api/nemotron/*`, `/api/seeq/*` | Nemotron alias resolution and SeeQ model residency/role helpers. |
 
-During onboarding, NemoClaw validates the selected provider and model before it creates the sandbox:
+### Copilot routes
 
-- OpenAI-compatible providers: tries `/responses` first, then `/chat/completions`
-- Anthropic-compatible providers: tries `/v1/messages`
-- If validation fails, the wizard prompts you to fix the selection before continuing
+Implemented in `copilot/api/*.go`.
 
-Credentials stay on the host in `~/.nemoclaw/credentials.json`. The sandbox only sees the routed `inference.local` endpoint, not your raw provider key.
-
-Local Ollama is supported in the standard onboarding flow. Local vLLM remains experimental, and local host-routed inference on macOS still depends on OpenShell host-routing support in addition to the local service itself being reachable on the host.
-
-## Host-Side State and Config
-
-NemoClaw keeps its operator-facing state on the host rather than inside the sandbox.
-These are the main files new users usually need to locate:
-
-| Path | Purpose |
+| Route | Purpose |
 |---|---|
-| `~/.nemoclaw/credentials.json` | Provider credentials saved during onboarding |
-| `~/.nemoclaw/sandboxes.json` | Registered sandbox metadata, including the default sandbox selection |
-| `~/.openclaw/openclaw.json` | Host OpenClaw configuration that NemoClaw snapshots or restores during migration flows |
+| `GET /healthz`, `GET /readyz` | Copilot API health/readiness. |
+| `GET /v1/copilot/qgot/status` | QGoT readiness as seen by Opseeq. |
+| `POST /v1/copilot/prompt` | Submit a prompt to `qgot.execute`. |
+| `GET /v1/copilot/runs`, `GET /v1/copilot/runs/{id}` | Read file-backed run envelopes from `runs/`. |
+| `GET /v1/copilot/runs/{id}/events` | Serve `trace.ndjson`. |
+| `GET /v1/copilot/runs/sse/{id}` | Tail `trace.ndjson` as server-sent events. |
+| `GET/PUT /v1/copilot/models` | List or update role-to-model bindings. |
+| `POST /v1/copilot/runs/control` | Pause, resume, or record redirect intent through `qgot.observe`. |
+| `POST /graphql`, `GET /graphql/schema` | Hand-written GraphQL endpoint and SDL. |
+| `/mcp/rpc` | MCP JSON-RPC proxy to the required QGoT MCP stdio command configured by `QGOT_MCP_CMD`. |
 
-Common environment variables for optional services and local access include `TELEGRAM_BOT_TOKEN`, `ALLOWED_CHAT_IDS`, and `CHAT_UI_URL`.
-For normal sandbox setup and reconfiguration, prefer `nemoclaw onboard` over editing these files by hand.
+## Data and artifacts
 
----
+| Data | Location | Notes |
+|---|---|---|
+| Gateway inference feedback | In memory, exposed by `GET /api/artifacts` | Bounded ring buffer in `service/src/feedback.ts`; not durable storage. |
+| Gateway immutable artifacts | `~/.opseeq-superior/artifacts/<task-id>/` | Written by `service/src/trace-sink.ts` for precision, graph, temporal, and related artifacts. |
+| Gateway temporal events | `~/.opseeq-superior/logs/temporal-causality.jsonl` | Written by `service/src/temporal-causality.ts`; events are also mirrored as immutable artifacts. |
+| Copilot runs | `copilot/runs/<run_id>/` or `QGOT_RUN_DIR` | Contains `prompt.txt`, `state.json`, `trace.ndjson`, `plan.json`, `verify.json`, `exec.jsonl`, and related files when produced. |
+| Copilot Prisma schema | `copilot/store/schema.prisma` | Schema exists for Postgres, but current run reads are file-backed in the Go API. |
 
-## Protection Layers
+## Configuration
 
-The sandbox starts with a default policy that controls network egress and filesystem access:
+Gateway environment examples live in `.env.example`; copilot examples live in `copilot/.env.example`.
 
-| Layer      | What it protects                                    | When it applies             |
-|------------|-----------------------------------------------------|-----------------------------|
-| Network    | Blocks unauthorized outbound connections.           | Hot-reloadable at runtime.  |
-| Filesystem | Prevents reads/writes outside `/sandbox` and `/tmp`.| Locked at sandbox creation. |
-| Process    | Blocks privilege escalation and dangerous syscalls. | Locked at sandbox creation. |
-| Inference  | Reroutes model API calls to controlled backends.    | Hot-reloadable at runtime.  |
+High-use gateway variables:
 
-When the agent tries to reach an unlisted host, OpenShell blocks the request and surfaces it in the TUI for operator approval.
+- `OPSEEQ_PORT`, `PORT`, `OPSEEQ_HOST`
+- `OPSEEQ_API_KEYS`, `OPSEEQ_API_KEY`
+- `OPSEEQ_DEFAULT_MODEL`, `OPSEEQ_MCP_ENABLED`
+- `OLLAMA_URL`, `OLLAMA_MODELS`, `LOCAL_LLM_BASE_URL`, `LOCAL_LLM_MODEL`
+- `NIM_LOCAL_URL`, `NIM_LOCAL_API_KEY`, `NIM_LOCAL_MODELS`
+- `NVIDIA_API_KEY`, `NVIDIA_BASE_URL`, `NVIDIA_MODELS`
+- `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `OPENAI_MODELS`
+- `ANTHROPIC_API_KEY`, `ANTHROPIC_BASE_URL`, `ANTHROPIC_MODELS`
+- `MERMATE_URL`, `SYNTHESIS_TRADE_URL`
 
----
+High-use copilot variables:
 
-## Configuring Sandbox Policy
+- `COPILOT_API_HOST`, `COPILOT_API_PORT`, `COPILOT_WEB_PORT`, `COPILOT_MCP_PORT`
+- `DATABASE_URL`
+- `QGOT_HTTP_BASE`, `QGOT_MCP_CMD`, `QGOT_RUN_DIR`
+- `COPILOT_MCP_TIMEOUT_MS`, `COPILOT_MCP_EXECUTE_TIMEOUT_MS`
+- `OPSEEQ_OBSERVER_MODEL`, `OPSEEQ_PLANNER_MODEL`, `OPSEEQ_CODER_MODEL`, `OPSEEQ_VERIFIER_MODEL`, `OPSEEQ_EXECUTOR_MODEL`
 
-The sandbox policy is defined in a declarative YAML file and enforced by the OpenShell runtime.
-NemoClaw ships a default policy in [`nemoclaw-blueprint/policies/openclaw-sandbox.yaml`](https://github.com/NVIDIA/NemoClaw/blob/main/nemoclaw-blueprint/policies/openclaw-sandbox.yaml) that denies all network egress except explicitly listed endpoints.
+## Documentation map
 
-Operators can customize the policy in two ways:
+Start here:
 
-| Method | How | Scope |
-|--------|-----|-------|
-| **Static** | Edit `openclaw-sandbox.yaml` and re-run `nemoclaw onboard`. | Persists across restarts. |
-| **Dynamic** | Run `openshell policy set <policy-file>` on a running sandbox. | Session only; resets on restart. |
+- `opseeq-architecture.md` — current Opseeq architecture and implemented boundaries.
+- `docs/INTEGRATION.md` — broad integration reference; still being reduced into exact canonical references.
+- `copilot/README.md` — copilot setup and operation.
+- `copilot/docs/architecture.md` — copilot process, bridge, and persistence architecture.
+- `copilot/docs/api.md` — copilot REST, GraphQL, SSE, and MCP reference.
+- `copilot/docs/system-trace.md` — user-action trace for copilot workflows.
 
-NemoClaw includes preset policy files for common integrations such as PyPI, Docker Hub, Slack, and Jira in `nemoclaw-blueprint/policies/presets/`. Apply a preset as-is or use it as a starting template.
+NemoClaw-specific docs remain under `docs/` and describe the inherited OpenShell/OpenClaw sandbox reference stack, not the Opseeq gateway API.
 
-NemoClaw is an open project — we are still determining which presets to ship by default. If you have suggestions, please open an [issue](https://github.com/NVIDIA/NemoClaw/issues) or [discussion](https://github.com/NVIDIA/NemoClaw/discussions).
+## Validation
 
-When the agent attempts to reach an endpoint not covered by the policy, OpenShell blocks the request and surfaces it in the TUI (`openshell term`) for the operator to approve or deny in real time. Approved endpoints persist for the current session only.
+Gateway:
 
-For step-by-step instructions, see [Customize Network Policy](https://docs.nvidia.com/nemoclaw/latest/network-policy/customize-network-policy.html). For the underlying enforcement details, see the OpenShell [Policy Schema](https://docs.nvidia.com/openshell/latest/reference/policy-schema.html) and [Sandbox Policies](https://docs.nvidia.com/openshell/latest/sandboxes/policies.html) documentation.
+```bash
+npm --prefix service run build
+```
 
----
+Copilot:
 
-## Key Commands
+```bash
+cd copilot
+make qc
+```
 
-### Host commands (`nemoclaw`)
-
-Run these on the host to set up, connect to, and manage sandboxes.
-
-| Command                              | Description                                            |
-|--------------------------------------|--------------------------------------------------------|
-| `nemoclaw onboard`                  | Interactive setup wizard: gateway, providers, sandbox. |
-| `nemoclaw <name> connect`            | Open an interactive shell inside the sandbox.          |
-| `openshell term`                     | Launch the OpenShell TUI for monitoring and approvals. |
-| `nemoclaw start` / `stop` / `status` | Manage auxiliary services (Telegram bridge, tunnel).   |
-
-See the full [CLI reference](https://docs.nvidia.com/nemoclaw/latest/reference/commands.html) for all commands, flags, and options.
-
----
-
-## Learn More
-
-Refer to the documentation for more information on NemoClaw.
-
-- [Overview](https://docs.nvidia.com/nemoclaw/latest/about/overview.html): Learn what NemoClaw does and how it fits together.
-- [How It Works](https://docs.nvidia.com/nemoclaw/latest/about/how-it-works.html): Learn about the plugin, blueprint, and sandbox lifecycle.
-- [Architecture](https://docs.nvidia.com/nemoclaw/latest/reference/architecture.html): Learn about the plugin structure, blueprint lifecycle, and sandbox environment.
-- [Inference Profiles](https://docs.nvidia.com/nemoclaw/latest/reference/inference-profiles.html): Learn how NemoClaw configures routed inference providers.
-- [Network Policies](https://docs.nvidia.com/nemoclaw/latest/reference/network-policies.html): Learn about egress control and policy customization.
-- [CLI Commands](https://docs.nvidia.com/nemoclaw/latest/reference/commands.html): Learn about the full command reference.
-- [Troubleshooting](https://docs.nvidia.com/nemoclaw/latest/reference/troubleshooting.html): Troubleshoot common issues and resolution steps.
-- [Discord](https://discord.gg/XFpfPv9Uvx): Join the community for questions and discussion.
+Root `make docs` builds the inherited Sphinx documentation tree under `docs/`; it is not required for the gateway or copilot TypeScript/Go builds.
 
 ## License
 
-This project is licensed under the [Apache License 2.0](LICENSE).
+This repository retains the existing project license in `LICENSE`.

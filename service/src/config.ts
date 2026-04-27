@@ -27,7 +27,7 @@ function parseProviders(): ProviderConfig[] {
       name: 'ollama',
       baseUrl: ollamaUrl.replace(/\/+$/, ''),
       apiKey: 'ollama',
-      models: (process.env.OLLAMA_MODELS || process.env.OLLAMA_MODEL || process.env.LOCAL_LLM_MODEL || 'gpt-oss:20b').split(',').map(s => s.trim()),
+      models: (process.env.OLLAMA_MODELS || process.env.OLLAMA_MODEL || process.env.LOCAL_LLM_MODEL || 'gpt-oss:20b,nemotron-3-nano:4b,qwen3.5:35b-a3b-coding-mxfp8,qwen3.5:9b').split(',').map(s => s.trim()),
       priority: -10,
     });
   }

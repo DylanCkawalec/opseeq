@@ -145,8 +145,8 @@ export function resolveNemotronAlias(model: string, config: ServiceConfig, promp
 
 /** Virtual model aliases for explicit task-role routing. */
 const ROLE_ALIASES: Record<string, { model: string; preferProvider: string }> = {
-  'role:code':      { model: 'qwen3-coder:30b',                   preferProvider: 'ollama' },
-  'role:reason':    { model: 'deepseek-r1:32b',                   preferProvider: 'ollama' },
+  'role:code':      { model: 'qwen3.5:35b-a3b-coding-mxfp8',      preferProvider: 'ollama' },
+  'role:reason':    { model: 'gpt-oss:20b',                       preferProvider: 'ollama' },
   'role:utility':   { model: 'nemotron-3-nano:4b',                preferProvider: 'ollama' },
   'role:reference': { model: 'nvidia/nemotron-3-super-120b-a12b', preferProvider: 'nvidia-nim' },
 };

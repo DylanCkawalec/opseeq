@@ -5,7 +5,7 @@ const { shellQuote } = require("./runner");
 
 const HOST_GATEWAY_URL = "http://host.openshell.internal";
 const CONTAINER_REACHABILITY_IMAGE = "curlimages/curl:8.10.1";
-const DEFAULT_OLLAMA_MODEL = "qwen3-coder:30b";
+const DEFAULT_OLLAMA_MODEL = "qwen3.5:35b-a3b-coding-mxfp8";
 const SMALL_OLLAMA_MODEL = "nemotron-3-nano:4b";
 const LARGE_OLLAMA_MIN_MEMORY_MB = 32768;
 

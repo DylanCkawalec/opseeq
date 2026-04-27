@@ -108,3 +108,10 @@ Agent (sandbox)  ──▶  OpenShell gateway  ──▶  NVIDIA Endpoint (build
 ```
 
 Refer to [Inference Profiles](../reference/inference-profiles.md) for provider configuration details.
+
+## Opseeq repository (`service/` + `copilot/`)
+
+This file documents **NemoClaw** (plugin + blueprint + sandbox). The same monorepo may also contain **Opseeq**:
+
+- **Gateway:** `service/` — Express/OpenAI-compatible API, MCP, `/api/*`, tracing under `~/.opseeq-superior/`. See **[`opseeq-architecture.md`](../../opseeq-architecture.md)** (root) for request IDs, `trace-sink`, `temporal-causality`, and `feedback` ring buffers.
+- **Copilot stack:** `copilot/` — separate Go/TS/web orchestrator; run artifacts under `copilot/runs/`. See [`copilot/README.md`](../../copilot/README.md) and [`copilot/docs/observability.md`](../../copilot/docs/observability.md).

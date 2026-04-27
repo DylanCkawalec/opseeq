@@ -15,8 +15,9 @@
  * kernel paths record using kernel-reported provider or `kernel`.
  * **Behavioral contract** — `routeInference` and `routeInferenceStream` throw the same error types
  * and messages as v5.0 for missing providers or unsupported stream.
- * **Tracing invariant** — `traceId` is forwarded to the kernel RPC when present; Node paths omit it
- * from upstream HTTP but may attach via `_opseeq` latency metadata.
+ * **Tracing invariant** — `traceId` is forwarded to the kernel RPC when present; Node paths persist the
+ * same value on `InferenceArtifact.traceId` via `recordArtifact` (not sent to provider APIs). Streaming
+ * completions do not call `recordArtifact` today (see `routeInferenceStream`).
  */
 import type { ProviderConfig, ServiceConfig } from './config.js';
 import type { KernelClient } from './kernel.js';
@@ -287,10 +288,27 @@ export async function routeInference(
     response = await callOpenAICompatible(provider, req);
   }
 
+  const latencyMs = Date.now() - start;
   response._opseeq = {
     provider: provider.name,
-    latencyMs: Date.now() - start,
+    latencyMs,
   };
+
+  const usage = response.usage;
+  recordSuccess(provider.name, latencyMs, usage ? {
+    prompt_tokens: usage.prompt_tokens,
+    completion_tokens: usage.completion_tokens,
+  } : undefined);
+  recordArtifact({
+    id: response.id || `n-${Date.now()}`,
+    model: response.model || req.model,
+    provider: provider.name,
+    latencyMs,
+    tokens: usage ? { input: usage.prompt_tokens, output: usage.completion_tokens } : null,
+    success: true,
+    timestamp: new Date().toISOString(),
+    traceId: traceId || null,
+  });
 
   return response;
 }

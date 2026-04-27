@@ -78,6 +78,9 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# Generated Copilot run artifacts
+copilot/runs/
+
 # LaTeX / compiler logs (not source)
 docs/**/*.log
 

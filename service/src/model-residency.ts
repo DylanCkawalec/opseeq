@@ -2,7 +2,7 @@
  * @module model-residency — SeeQ-managed model residency, stickiness, and escalation
  *
  * **Axiom A1 — Single-active-large** — At most one large local specialist model
- * (qwen3-coder:30b or deepseek-r1:32b) may be resident at a time on 32 GB RAM.
+ * (default: qwen3.5:35b-a3b-coding-mxfp8) may be resident at a time on constrained RAM.
  * **Axiom A2 — Hot tier is permanent** — gpt-oss:20b and nemotron-3-nano:4b are
  * always kept warm via keep_alive: "forever".
  * **Postulate P1 — Warm window** — The active-large model stays resident for
@@ -28,7 +28,8 @@ const OLLAMA_BASE = (process.env.OLLAMA_URL || process.env.LOCAL_LLM_BASE_URL ||
 // ── Residency Tier Definitions ──────────────────────────────────────
 
 const HOT_MODELS = ['gpt-oss:20b', 'nemotron-3-nano:4b'] as const;
-const LARGE_MODELS = ['qwen3-coder:30b', 'deepseek-r1:32b'] as const;
+/** Large Ollama specialists (one resident at a time); tune via OLLAMA_MODELS on your host. */
+const LARGE_MODELS = ['qwen3.5:35b-a3b-coding-mxfp8'] as const;
 
 type LargeModel = typeof LARGE_MODELS[number];
 
@@ -227,12 +228,12 @@ export function shouldEscalate(
 ): EscalationResult | null {
   // utility → code: task must be code-related AND complexity threshold met
   if (isCodeTask(taskKind) && complexity > CODE_THRESHOLD) {
-    return { escalate: true, target: 'qwen3-coder:30b', reason: `code task (${taskKind}) with complexity ${complexity.toFixed(2)} > ${CODE_THRESHOLD}` };
+    return { escalate: true, target: 'qwen3.5:35b-a3b-coding-mxfp8', reason: `code task (${taskKind}) with complexity ${complexity.toFixed(2)} > ${CODE_THRESHOLD}` };
   }
 
-  // code → reason: task must need reasoning AND (complexity OR retry condition)
+  // utility/hot → reasoning: task must need reasoning AND (complexity OR retry condition)
   if (isReasonTask(taskKind) && (complexity > REASON_THRESHOLD || retryCount > 2)) {
-    return { escalate: true, target: 'deepseek-r1:32b', reason: `reasoning task (${taskKind}) with complexity ${complexity.toFixed(2)} / retries ${retryCount}` };
+    return { escalate: true, target: 'gpt-oss:20b', reason: `reasoning task (${taskKind}) with complexity ${complexity.toFixed(2)} / retries ${retryCount}` };
   }
 
   // local → API: quality insufficient, retry budget exceeded, or explicit

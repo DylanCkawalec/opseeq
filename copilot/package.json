@@ -1,0 +1,39 @@
+{
+  "name": "@opseeq/copilot",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "workspaces": [
+    "web"
+  ],
+  "scripts": {
+    "dev:all": "concurrently -k -n mcp,api,web -c blue,green,magenta \"pnpm run mcp:start\" \"pnpm run api:start\" \"pnpm --filter ./web run dev\"",
+    "dev:stop": "pkill -f 'qgot-copilot-api' || true; pkill -f 'mcp/server.ts' || true",
+    "mcp:start": "tsx mcp/server.ts",
+    "api:start": "cd api && go run .",
+    "lint": "eslint 'agents/**/*.ts' 'workflow/**/*.ts' 'models/**/*.ts' 'mcp/**/*.ts' 'obs/**/*.ts'",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "build:agents": "tsc -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "concurrently": "^9.0.0",
+    "eslint": "^9.0.0",
+    "prisma": "^5.20.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.5.0",
+    "typescript-eslint": "^8.59.0",
+    "vitest": "^2.0.0"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "@prisma/client": "^5.20.0",
+    "dotenv": "^16.4.5",
+    "ulid": "^2.3.0",
+    "zod": "^3.23.8"
+  }
+}
