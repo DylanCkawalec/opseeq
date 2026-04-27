@@ -18,6 +18,7 @@ Opseeq coordinates local and remote AI services through explicit gateway, dashbo
 - Routes chat completions and embeddings through configured providers in `service/src/config.ts` and `service/src/router.ts`.
 - Reports readiness for Ollama, configured model providers, Mermate, Synth, NemoClaw, the Living Architecture Graph, and precision orchestration assets through `GET /api/status`.
 - Exposes MCP tools from `service/src/mcp-server.ts` for status, chat, connectivity probes, model listing, Mermate/Synth actions, repo organization, precision planning, graph queries, and browser-use helpers.
+- Exposes the full system architecture contract through `/api/system/*`: component topology, API design, agent roles, guardrails, observability, and read-only supervisor planning envelopes.
 - Connects repositories and app surfaces through `POST /api/repos/connect` and `POST /api/apps/open`.
 - Runs precision/OODA planning through `POST /api/ooda/precision`; effectful execution is controlled by request flags such as `approved`, `execute`, `allowRemoteAugmentation`, and artifact options.
 - Runs QGoT copilot workflows through `copilot/`; the production Go API invokes the QGoT MCP stdio gateway configured by `QGOT_MCP_CMD` and fails closed when that command is missing or unavailable.
@@ -106,6 +107,7 @@ Implemented in `service/src/index.ts`.
 | `GET /mcp`, `POST /mcp/messages` | Gateway MCP SSE transport when `OPSEEQ_MCP_ENABLED` is not `false`. |
 | `POST /api/repos/connect` | Analyze/connect a local repo through `service/src/repo-connect.ts`. |
 | `POST /api/apps/open` | Open a configured app surface through `service/src/app-launcher.ts`. |
+| `GET/POST /api/system/*` | System architecture, API design, role contracts, guardrails, observability, and supervisor planning envelopes. |
 | `GET/POST /api/ooda/*` | Precision orchestration and Living Architecture Graph routes. |
 | `GET/POST /api/render*`, `/api/architect/*`, `/api/builder/scaffold` | Mermate proxy and pipeline routes. |
 | `GET/POST /api/nemoclaw/*` | NemoClaw status/action/default controls. |
@@ -136,6 +138,7 @@ Implemented in `copilot/api/*.go`.
 | Gateway inference feedback | In memory, exposed by `GET /api/artifacts` | Bounded ring buffer in `service/src/feedback.ts`; not durable storage. |
 | Gateway immutable artifacts | `~/.opseeq-superior/artifacts/<task-id>/` | Written by `service/src/trace-sink.ts` for precision, graph, temporal, and related artifacts. |
 | Gateway temporal events | `~/.opseeq-superior/logs/temporal-causality.jsonl` | Written by `service/src/temporal-causality.ts`; events are also mirrored as immutable artifacts. |
+| System architecture contract | Gateway `/api/system/*`; dashboard v2.5 Systems tab | Aggregates existing modules; does not create a new database or replace the durable ledgers. |
 | Copilot runs | `copilot/runs/<run_id>/` or `QGOT_RUN_DIR` | Contains `prompt.txt`, `state.json`, `trace.ndjson`, `plan.json`, `verify.json`, `exec.jsonl`, and related files when produced. |
 | Copilot Prisma schema | `copilot/store/schema.prisma` | Schema exists for Postgres, but current run reads are file-backed in the Go API. |
 

@@ -44,6 +44,12 @@ Authentication: if `OPSEEQ_API_KEYS` or `OPSEEQ_API_KEY` is set, protected route
 | `POST` | `/api/connectivity/probe` | HTTPS HEAD probe for a supplied host |
 | `POST` | `/api/repos/connect` | Analyze a local repo and merge Opseeq `.env` / `.mcp.json` wiring |
 | `POST` | `/api/apps/open` | Open or launch a managed local app surface |
+| `GET` | `/api/system/architecture` | Full as-built component, API, role, guardrail, model-routing, and observability contract |
+| `GET` | `/api/system/api` | API design groups with auth and side-effect metadata |
+| `GET` | `/api/system/roles` | Agent role contracts for supervisor, planner, verifier, executor, observer, coder, guardrail, and model-router roles |
+| `GET` | `/api/system/observability` | Unified observability across immutable artifacts, temporal events, execution sessions, and run ledgers |
+| `GET` | `/api/system/guardrails` | Guardrail decision matrix |
+| `POST` | `/api/system/supervisor/plan` | Read-only white-pane plan and approval envelope; does not execute commands |
 | `GET` | `/api/nemoclaw/status` | NemoClaw registry, gateway, sandbox, and app status |
 | `POST` | `/api/nemoclaw/actions` | `connect`, `status`, or `logs` for a registered sandbox |
 | `POST` | `/api/nemoclaw/default` | Set the default NemoClaw sandbox |
@@ -120,6 +126,7 @@ Important tool groups:
 | Mermate | `mermate_status`, `mermate_render`, `mermate_generate_tla`, `mermate_generate_ts`, `pipeline_orchestrate`, `artifact_verify` | Proxies local Mermate endpoints |
 | Synth | `synth_status`, `synth_predict`, `synth_predictions`, `synth_markets`, `synth_portfolio` | Uses Synth local API; external effects depend on Synth configuration |
 | Precision orchestration | `precision_status`, `precision_plan`, `precision_dashboard`, `living_architecture_graph`, `living_architecture_search`, `living_architecture_node`, `living_architecture_refresh` | Mirrors the REST OODA and graph surfaces |
+| System contract | `system_architecture`, `system_api_design`, `system_agent_roles`, `system_observability`, `system_guardrails`, `supervisor_plan` | Mirrors `/api/system/*` for agentic clients |
 | Desktop and repos | `desktop_scan`, `repo_organize`, `browser_navigate`, `browser_interact` | Local-resource tools; treat as operator-controlled |
 
 Read tools return structured JSON or an MCP error envelope. Write/effectful tools should be driven from an explicit plan and approval path.
@@ -143,7 +150,7 @@ REST:
 | `GET/PUT` | `/v1/copilot/models` | List or update role model bindings |
 | `GET` | `/v1/copilot/qgot/status` | QGoT bridge readiness |
 | `GET` | `/v1/copilot/metrics/summary` | Aggregate run count, status counts, and max drift |
-| `POST` | `/mcp/rpc` | Proxy JSON-RPC to the TypeScript MCP bridge |
+| `POST` | `/mcp/rpc` | Proxy JSON-RPC to the required QGoT MCP stdio command configured by `QGOT_MCP_CMD` |
 
 GraphQL is implemented by a small hand-written endpoint in `copilot/api/graph.go`. `GET /graphql/schema` serves the SDL. `POST /graphql` recognizes `submitPrompt`, `setRoleModel`, `run`, `runs`, `models`, and `qgotStatus`.
 
@@ -161,8 +168,10 @@ Persistence note: the Prisma schema exists under `copilot/store/schema.prisma`, 
 | Plan precision workflow | Precision tab | `/api/ooda/precision` | `orchestratePrecisionPipeline` | `~/.opseeq-superior/artifacts/*`, temporal JSONL, graph version | Required before `execute=true` |
 | Refresh graph | Living Graph tab | `/api/ooda/dashboard?refresh=true` or `/api/ooda/graph/refresh` | `living-architecture-graph.ts` | Graph index and optional immutable graph artifact | Not required unless writing a version is treated as persistent state |
 | Sandbox inspect/connect/logs | NemoClaw tab | `/api/nemoclaw/actions` | `nemoclaw-control.ts` or dashboard terminal bridge | Terminal output only | Operator action; destructive sandbox commands are not exposed here |
-| Submit copilot task | Copilot web prompt | `/v1/copilot/prompt` | Go API -> TS MCP `qgot.execute` -> workflow engine or QGoT bridge | `copilot/runs/<id>/` | Current copilot execution path has pause/resume/redirect, but no file-diff approval UI |
-| Change copilot model binding | Copilot web models | `/v1/copilot/models` or GraphQL `setRoleModel` | TS MCP `qgot.models` | Runtime registry; Prisma schema exists for future persistence | Operator action |
+| Inspect system contract | v2.5 Systems tab | `/api/system/architecture`, `/api/system/api`, `/api/system/roles`, `/api/system/observability`, `/api/system/guardrails` | `system-architecture.ts` | Read-only aggregation from existing ledgers | Not required |
+| Build supervisor plan | MCP or API client | `/api/system/supervisor/plan` or MCP `supervisor_plan` | `system-architecture.ts` | Response-only white-pane plan and envelope | Approval shown in returned envelope; no execution occurs |
+| Submit copilot task | Copilot web prompt | `/v1/copilot/prompt` | Go API -> QGoT MCP `qgot.execute` through `QGOT_MCP_CMD` | `copilot/runs/<id>/` or `QGOT_RUN_DIR` | Current copilot execution path has pause/resume/redirect, but no file-diff approval UI |
+| Change copilot model binding | Copilot web models | `/v1/copilot/models` or GraphQL `setRoleModel` | Go API -> QGoT MCP `qgot.models` through `QGOT_MCP_CMD` | Runtime registry; Prisma schema exists for future persistence | Operator action |
 
 ## Human-in-the-loop semantics
 
@@ -181,6 +190,7 @@ Effectful workflows must make these fields visible to users:
 Implemented approval signals:
 
 - `service/src/mermate-lucidity-ooda.ts` returns `executionEnvelope.approved`, `commands`, `fileScope`, `networkScope`, and `stageResults`.
+- `service/src/system-architecture.ts` returns read-only supervisor plans with `approval`, hard policy blocks, and an `executionEnvelope` that remains unapproved unless the exact request is approved and has no hard blocks.
 - Temporal events include `approvalState`.
 - Stage status can be `pending_approval`, `ready`, `executed`, `blocked`, or `unavailable`.
 
@@ -231,11 +241,11 @@ Copilot:
 |---|---|
 | `COPILOT_API_HOST`, `COPILOT_API_PORT` | Copilot API bind |
 | `COPILOT_WEB_PORT` | Vite web port |
-| `COPILOT_MCP_PORT`, `COPILOT_MCP_RPC` | MCP HTTP bridge |
+| `COPILOT_MCP_PORT`, `COPILOT_MCP_RPC` | Optional TypeScript MCP development bridge |
 | `DATABASE_URL` | Prisma/Postgres target |
 | `QGOT_ENV_PATH` | Optional upstream QGoT `.env` path |
-| `QGOT_HTTP_BASE`, `QGOT_MCP_CMD`, `QGOT_BRIDGE_MODE`, `QGOT_BRIDGE_TIMEOUT_MS`, `QGOT_BRIDGE_EXECUTE_TIMEOUT_MS` | QGoT bridge behavior |
-| `QGOT_RUN_DIR` | Run artifact directory |
+| `QGOT_HTTP_BASE`, `QGOT_MCP_CMD`, `QGOT_RUN_DIR` | QGoT production MCP/readiness and run artifact behavior |
+| `COPILOT_MCP_TIMEOUT_MS`, `COPILOT_MCP_EXECUTE_TIMEOUT_MS` | QGoT MCP stdio call timeouts |
 | `OPSEEQ_OBSERVER_MODEL`, `OPSEEQ_PLANNER_MODEL`, `OPSEEQ_CODER_MODEL`, `OPSEEQ_VERIFIER_MODEL`, `OPSEEQ_EXECUTOR_MODEL` | Role model defaults |
 | `OPSEEQ_OBSERVER_PROVIDER`, `OPSEEQ_PLANNER_PROVIDER`, `OPSEEQ_CODER_PROVIDER`, `OPSEEQ_VERIFIER_PROVIDER`, `OPSEEQ_EXECUTOR_PROVIDER` | Role provider overrides |
 | `DRIFT_THRESHOLD`, `TRACE_ENABLED`, `EMBEDDING_MODEL`, `EMBEDDING_PROVIDER` | Observability settings |

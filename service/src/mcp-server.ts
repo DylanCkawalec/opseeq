@@ -462,8 +462,62 @@ export function createMcpServer(config: ServiceConfig): McpServer {
       return ok({ action, element_index, text, result: stdout.trim() });
     } catch (e) { return fail(`Browser interaction failed: ${action}`, e); }
   });
+  // ── 29. system_architecture ─────────────────────────────────────
+  server.tool('system_architecture', 'Inspect the full Opseeq system architecture contract, including components, API groups, roles, guardrails, and observability', {
+    taskId: z.string().optional().describe('Optional task id used to filter observability ledgers'),
+    artifactLimit: z.number().optional().describe('Maximum immutable artifacts to include'),
+    eventLimit: z.number().optional().describe('Maximum temporal events to include'),
+    sessionLimit: z.number().optional().describe('Maximum execution sessions to include'),
+  }, async ({ taskId, artifactLimit, eventLimit, sessionLimit }) =>
+    safeFetch('System architecture unavailable', `${OPSEEQ_URL}/api/system/architecture${buildQuery({ taskId, artifactLimit, eventLimit, sessionLimit })}`));
 
-  // ── 29. health_check ────────────────────────────────────────────
+  // ── 30. system_api_design ───────────────────────────────────────
+  server.tool('system_api_design', 'Inspect Opseeq API design groups with auth and side-effect contracts', {}, async () =>
+    safeFetch('System API design unavailable', `${OPSEEQ_URL}/api/system/api`));
+
+  // ── 31. system_agent_roles ──────────────────────────────────────
+  server.tool('system_agent_roles', 'Inspect Opseeq supervisor, planner, verifier, executor, observer, coder, guardrail, and model-router role contracts', {}, async () =>
+    safeFetch('System agent roles unavailable', `${OPSEEQ_URL}/api/system/roles`));
+
+  // ── 32. system_observability ────────────────────────────────────
+  server.tool('system_observability', 'Inspect unified Opseeq observability across artifacts, temporal events, execution sessions, and run ledgers', {
+    taskId: z.string().optional().describe('Optional task id used to filter observability ledgers'),
+    artifactLimit: z.number().optional().describe('Maximum immutable artifacts to include'),
+    eventLimit: z.number().optional().describe('Maximum temporal events to include'),
+    sessionLimit: z.number().optional().describe('Maximum execution sessions to include'),
+  }, async ({ taskId, artifactLimit, eventLimit, sessionLimit }) =>
+    safeFetch('System observability unavailable', `${OPSEEQ_URL}/api/system/observability${buildQuery({ taskId, artifactLimit, eventLimit, sessionLimit })}`));
+
+  // ── 33. system_guardrails ───────────────────────────────────────
+  server.tool('system_guardrails', 'Inspect Opseeq guardrail rules and default deny/ask/allow behavior', {}, async () =>
+    safeFetch('System guardrails unavailable', `${OPSEEQ_URL}/api/system/guardrails`));
+
+  // ── 34. supervisor_plan ─────────────────────────────────────────
+  server.tool('supervisor_plan', 'Build the read-only white-pane supervisor plan and approval envelope for a human intent', {
+    intent: z.string().min(1).describe('Human task or architecture intent'),
+    repoPath: z.string().optional().describe('Absolute local repo path'),
+    appId: z.string().optional().describe('Target app id'),
+    operator: z.string().optional().describe('Operator label'),
+    approved: z.boolean().optional().describe('Whether the human has already approved the exact envelope'),
+    requestedCommands: z.array(z.string()).optional().describe('Commands requested for eventual execution'),
+    fileScope: z.array(z.string()).optional().describe('Approved or requested file/directory scope'),
+    networkScope: z.array(z.string()).optional().describe('Approved or requested network destinations'),
+    processScope: z.array(z.string()).optional().describe('Approved or requested local process scope'),
+    supervisorModel: z.string().optional().describe('Supervisor model override'),
+    executionModel: z.string().optional().describe('Execution model override'),
+    allowRemoteAugmentation: z.boolean().optional().describe('Whether remote augmentation is approved'),
+    expectedArtifacts: z.array(z.string()).optional().describe('Expected artifact names or classes'),
+    stopConditions: z.array(z.string()).optional().describe('Explicit stop conditions'),
+  }, async ({ supervisorModel, executionModel, allowRemoteAugmentation, ...input }) =>
+    safeFetch('Supervisor plan failed', `${OPSEEQ_URL}/api/system/supervisor/plan`, {
+      method: 'POST',
+      body: JSON.stringify({
+        ...input,
+        modelPolicy: { supervisorModel, executionModel, allowRemoteAugmentation },
+      }),
+    }));
+
+  // ── 35. health_check ────────────────────────────────────────────
   server.tool('health_check', 'Check health of all configured providers', {}, async () => {
     const providerStatus = await Promise.allSettled(config.providers.map(async (provider) => {
       const ctrl = new AbortController();

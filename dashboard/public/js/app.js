@@ -789,16 +789,135 @@
   }
 
   // ── v2.5 Systems Tab ────────────────────────────────────────────
+  function guardrailTone(ruleDefault) {
+    switch (ruleDefault) {
+      case 'allow': return 'ok';
+      case 'ask': return 'warn';
+      case 'deny':
+      case 'deny-and-ask': return 'error';
+      default: return 'muted';
+    }
+  }
+
+  function renderSystemArchitecture(systemRes, apiRes, rolesRes, obsRes, guardrailsRes) {
+    const components = Array.isArray(systemRes?.components) ? systemRes.components : [];
+    const apiGroups = Array.isArray(apiRes?.groups) ? apiRes.groups : (Array.isArray(systemRes?.apiGroups) ? systemRes.apiGroups : []);
+    const roles = Array.isArray(rolesRes?.roles) ? rolesRes.roles : (Array.isArray(systemRes?.roles) ? systemRes.roles : []);
+    const observability = obsRes || systemRes?.observability || {};
+    const guardrails = Array.isArray(guardrailsRes?.guardrails) ? guardrailsRes.guardrails : (Array.isArray(systemRes?.guardrails) ? systemRes.guardrails : []);
+    const counts = observability.counts || {};
+
+    text('system-contract-status', systemRes ? 'Implemented' : '--');
+    text('system-components-count', String(components.length || 0));
+    text('system-api-groups-count', String(apiGroups.length || 0));
+    text('system-roles-count', String(roles.length || 0));
+    text('system-default-model', systemRes?.modelRouting?.defaultModel || '--');
+    text('system-artifacts-count', String(counts.immutableArtifacts ?? 0));
+    text('system-events-count', String(counts.temporalEvents ?? 0));
+    text('system-sessions-count', String(counts.executionSessions ?? 0));
+    text('system-extensions-count', String(counts.extensionPacks ?? 0));
+    text('system-tracerank-role', observability.traceRankContract?.notPolicyEngine ? 'Observer only' : '--');
+
+    const componentList = $('system-component-list');
+    if (componentList) {
+      componentList.innerHTML = components.length
+        ? components.map((component) => `
+          <article class="system-contract-item">
+            <div class="system-contract-main">
+              <div class="system-contract-title">${escapeHtml(component.label)}</div>
+              <div class="system-contract-meta">${escapeHtml(component.layer)} · ${escapeHtml(component.status)}</div>
+              <div class="system-contract-detail">${escapeHtml((component.responsibilities || []).join(' · '))}</div>
+              <div class="system-contract-detail">${escapeHtml((component.implementation || []).join(', '))}</div>
+            </div>
+            <div class="system-contract-tags">
+              ${(component.observability || []).slice(0, 3).map((hook) => `<span class="state-pill muted">${escapeHtml(hook)}</span>`).join('')}
+            </div>
+          </article>
+        `).join('')
+        : '<div class="empty-state">No system components reported.</div>';
+    }
+
+    const roleList = $('system-role-list');
+    if (roleList) {
+      roleList.innerHTML = roles.length
+        ? roles.map((role) => `
+          <article class="system-contract-item compact">
+            <div class="system-contract-main">
+              <div class="system-contract-title">${escapeHtml(role.label)}</div>
+              <div class="system-contract-meta">${escapeHtml(role.id)} · ${escapeHtml(role.modelAlias)}</div>
+              <div class="system-contract-detail">${escapeHtml((role.responsibilities || []).slice(0, 3).join(' · '))}</div>
+            </div>
+            <span class="state-pill ok">${escapeHtml((role.requiredArtifacts || []).length)} artifacts</span>
+          </article>
+        `).join('')
+        : '<div class="empty-state">No role contracts reported.</div>';
+    }
+
+    const guardrailList = $('system-guardrail-list');
+    if (guardrailList) {
+      guardrailList.innerHTML = guardrails.length
+        ? guardrails.map((rule) => `
+          <article class="system-contract-item compact">
+            <div class="system-contract-main">
+              <div class="system-contract-title">${escapeHtml(rule.operation)}</div>
+              <div class="system-contract-meta">${escapeHtml(rule.layer)} · approval ${rule.requiresApproval ? 'required' : 'not required'}</div>
+              <div class="system-contract-detail">${escapeHtml((rule.blockConditions || []).slice(0, 2).join(' · '))}</div>
+            </div>
+            <span class="state-pill ${guardrailTone(rule.default)}">${escapeHtml(rule.default)}</span>
+          </article>
+        `).join('')
+        : '<div class="empty-state">No guardrails reported.</div>';
+    }
+
+    const apiList = $('system-api-list');
+    if (apiList) {
+      apiList.innerHTML = apiGroups.length
+        ? apiGroups.map((group) => `
+          <article class="system-contract-item">
+            <div class="system-contract-main">
+              <div class="system-contract-title">${escapeHtml(group.label)}</div>
+              <div class="system-contract-meta">${escapeHtml(group.id)} · ${(group.routes || []).length} routes</div>
+              <div class="system-contract-detail">${escapeHtml(group.purpose)}</div>
+            </div>
+            <div class="system-contract-tags">
+              ${(group.routes || []).slice(0, 5).map((route) => `<span class="state-pill muted">${escapeHtml(route.method)} ${escapeHtml(route.path)}</span>`).join('')}
+            </div>
+          </article>
+        `).join('')
+        : '<div class="empty-state">No API groups reported.</div>';
+    }
+  }
   async function pollV25Systems() {
     try {
-      const [absorptionRes, toolsRes, sessionsRes, stagesRes, vendorRes, subagentRes] = await Promise.all([
+      const [
+        absorptionRes,
+        toolsRes,
+        sessionsRes,
+        stagesRes,
+        vendorRes,
+        subagentRes,
+        systemRes,
+        systemApiRes,
+        systemRolesRes,
+        systemObsRes,
+        systemGuardrailsRes,
+      ] = await Promise.all([
         fetch('/api/absorption/status').then(r => r.ok ? r.json() : null).catch(() => null),
         fetch('/api/execution/tools').then(r => r.ok ? r.json() : null).catch(() => null),
         fetch('/api/execution/sessions').then(r => r.ok ? r.json() : null).catch(() => null),
         fetch('/api/pipeline/stages').then(r => r.ok ? r.json() : null).catch(() => null),
         fetch('/api/pipeline/mermate-vendor').then(r => r.ok ? r.json() : null).catch(() => null),
         fetch('/api/subagents/dashboard').then(r => r.ok ? r.json() : null).catch(() => null),
+        fetch('/api/system/architecture').then(r => r.ok ? r.json() : null).catch(() => null),
+        fetch('/api/system/api').then(r => r.ok ? r.json() : null).catch(() => null),
+        fetch('/api/system/roles').then(r => r.ok ? r.json() : null).catch(() => null),
+        fetch('/api/system/observability').then(r => r.ok ? r.json() : null).catch(() => null),
+        fetch('/api/system/guardrails').then(r => r.ok ? r.json() : null).catch(() => null),
       ]);
+
+      if (systemRes || systemApiRes || systemRolesRes || systemObsRes || systemGuardrailsRes) {
+        renderSystemArchitecture(systemRes, systemApiRes, systemRolesRes, systemObsRes, systemGuardrailsRes);
+      }
 
       if (absorptionRes) {
         text('absorption-status', absorptionRes.absorbed ? 'Complete' : 'Pending');
@@ -861,6 +980,10 @@
   const btnExecRefresh = $('btn-exec-refresh');
   if (btnExecRefresh) {
     btnExecRefresh.addEventListener('click', () => pollV25Systems());
+  }
+  const btnSystemRefresh = $('btn-system-refresh');
+  if (btnSystemRefresh) {
+    btnSystemRefresh.addEventListener('click', () => pollV25Systems());
   }
   const btnSubagentRefresh = $('btn-subagent-refresh');
   if (btnSubagentRefresh) {

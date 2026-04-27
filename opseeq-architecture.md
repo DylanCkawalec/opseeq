@@ -86,6 +86,7 @@ The route list is implemented in `service/src/index.ts`.
 | MCP | `GET /mcp`, `POST /mcp/messages` when enabled |
 | Repo/app controls | `POST /api/repos/connect`, `POST /api/apps/open` |
 | NemoClaw controls | `GET /api/nemoclaw/status`, `POST /api/nemoclaw/actions`, `POST /api/nemoclaw/default` |
+| System architecture | `GET /api/system/architecture`, `GET /api/system/api`, `GET /api/system/roles`, `GET /api/system/observability`, `GET /api/system/guardrails`, `POST /api/system/supervisor/plan` |
 | Precision and graph | `GET /api/ooda/extensions`, `GET /api/ooda/dashboard`, `GET /api/ooda/graph`, `GET /api/ooda/graph/search`, `GET /api/ooda/graph/node/:nodeId`, `POST /api/ooda/graph/refresh`, `POST /api/ooda/precision` |
 | Mermate proxy | `GET /api/architect/status`, `POST /api/architect/pipeline`, `POST /api/builder/scaffold`, `/api/render*`, `/api/agent/modes`, `/api/agents`, `/api/copilot/health` |
 | Execution and pipeline | `GET /api/absorption/status`, `POST /api/execution/bootstrap`, `POST /api/execution/route`, `GET /api/execution/tools`, `GET /api/execution/sessions`, `GET /api/pipeline/stages`, `GET /api/pipeline/mermate-vendor`, `POST /api/pipeline/session`, `POST /api/pipeline/execute`, `GET /api/pipeline/status/:sid` |
@@ -103,8 +104,32 @@ Implemented in `service/src/mcp-server.ts`.
 | Synth | `synth_status`, `synth_predict`, `synth_predictions`, `synth_markets`, `synth_portfolio` |
 | Repos and desktop | `desktop_scan`, `repo_organize`, `browser_navigate`, `browser_interact` |
 | Precision and graph | `precision_status`, `precision_plan`, `precision_dashboard`, `living_architecture_graph`, `living_architecture_search`, `living_architecture_node`, `living_architecture_refresh` |
+| System contract | `system_architecture`, `system_api_design`, `system_agent_roles`, `system_observability`, `system_guardrails`, `supervisor_plan` |
 
 MCP transport is SSE: `GET /mcp` creates a session and `POST /mcp/messages?sessionId=...` sends messages.
+
+## System architecture contract
+
+The system contract is implemented in `service/src/system-architecture.ts` and exposed through `/api/system/*`. It aggregates current code paths instead of introducing a new store:
+
+- components from the as-built gateway, dashboard, execution runtime, terminal bridge, artifact ledger, temporal causality ledger, model router, guardrail contract, and QGoT-backed copilot surfaces
+- API groups with route, auth, and side-effect metadata
+- agent role contracts for supervisor, planner, verifier, executor, observer, coder, guardrail, and model-router roles
+- guardrail matrix covering reads, writes, deletes, local processes, remote APIs, credentials, persistence, and privilege escalation
+- observability snapshots from `trace-sink.ts`, `temporal-causality.ts`, `execution-runtime.ts`, extension registry metadata, and documented Copilot run ledgers
+
+Implemented routes:
+
+| Route | Behavior |
+|---|---|
+| `GET /api/system/architecture` | Full component/API/role/guardrail/model-routing/observability snapshot. Optional `taskId`, `artifactLimit`, `eventLimit`, and `sessionLimit` query parameters scope ledger output. |
+| `GET /api/system/api` | API group and route contracts with auth and side-effect metadata. |
+| `GET /api/system/roles` | Agent role contracts with responsibilities, model aliases, inputs, outputs, required artifacts, observability hooks, and hard limits. |
+| `GET /api/system/observability` | Unified observability snapshot across durable ledgers and run stores. Optional `taskId`, `artifactLimit`, `eventLimit`, and `sessionLimit` query parameters scope ledger output. |
+| `GET /api/system/guardrails` | Guardrail rule matrix and default policy posture. |
+| `POST /api/system/supervisor/plan` | Read-only white-pane supervisor plan and approval envelope. It returns `keyQuestions`, `detailedPlan`, `rankedActions`, `riskAssessment`, `permissionRequest`, `approval`, and `executionEnvelope`; it does not execute commands. |
+
+The dashboard v2.5 Systems tab renders these endpoints in the “System Architecture Contract,” “Unified Observability,” “Component Topology,” “Agent Role Contracts,” “Guardrail Matrix,” and “API Design Groups” panels.
 
 ## Dashboard architecture
 
@@ -215,6 +240,7 @@ The TypeScript MCP server and local workflow engine remain useful for developmen
 | Gateway inference artifact ring | `service/src/feedback.ts` | Memory, exposed by `GET /api/artifacts` | Process-local only. |
 | Gateway immutable artifacts | `service/src/trace-sink.ts` | `~/.opseeq-superior/artifacts/<task-id>/` | Disk files. |
 | Gateway temporal causality | `service/src/temporal-causality.ts` | `~/.opseeq-superior/logs/temporal-causality.jsonl` plus artifact mirror | Disk files. |
+| System architecture snapshot | `service/src/system-architecture.ts` | Read-only aggregation from existing stores | Request-time contract. |
 | Living Architecture Graph | `service/src/living-architecture-graph.ts` | Graph/artifact files managed by module | Disk-backed module behavior. |
 | Copilot run state | `copilot/obs/writer.ts`, `copilot/api/rest.go`, `copilot/api/graph.go` | `copilot/runs/<run_id>/` or `QGOT_RUN_DIR` | Disk files. |
 | Copilot database schema | `copilot/store/schema.prisma` | Postgres when migrations are applied | Schema exists; current Go run reads use files. |

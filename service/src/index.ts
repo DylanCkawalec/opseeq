@@ -38,6 +38,7 @@ import type { ChatCompletionRequest } from './router.js';
 import { getEmbeddingProvider, resolveNemotronAlias, estimateComplexity, resolveRoleAlias } from './provider-resolution.js';
 import { getResidencyState, ensureWarm } from './model-residency.js';
 import { getAgentOsStatus, createAgentVm, createAgentSession, promptSession, stopVm, listVms, listSessions as listAgentOsSessions } from './agent-os.js';
+import { buildSystemArchitectureSnapshot, buildSystemObservabilitySnapshot, buildSupervisorPlan, getAgentRoleContracts, getGuardrailRules, getSystemApiDesign } from './system-architecture.js';
 
 const config = loadConfig();
 
@@ -694,6 +695,62 @@ app.post('/api/connectivity/probe', authenticate, async (req, res) => {
   } finally { clearTimeout(timer); }
 });
 
+app.get('/api/system/architecture', authenticate, (req, res) => {
+  res.json(buildSystemArchitectureSnapshot(config, {
+    taskId: typeof req.query.taskId === 'string' ? req.query.taskId : undefined,
+    artifactLimit: typeof req.query.artifactLimit === 'string' ? Number(req.query.artifactLimit) : undefined,
+    eventLimit: typeof req.query.eventLimit === 'string' ? Number(req.query.eventLimit) : undefined,
+    sessionLimit: typeof req.query.sessionLimit === 'string' ? Number(req.query.sessionLimit) : undefined,
+  }));
+});
+
+app.get('/api/system/api', authenticate, (_req, res) => {
+  res.json({ generatedAt: new Date().toISOString(), groups: getSystemApiDesign() });
+});
+
+app.get('/api/system/roles', authenticate, (_req, res) => {
+  res.json({ generatedAt: new Date().toISOString(), roles: getAgentRoleContracts() });
+});
+
+app.get('/api/system/observability', authenticate, (req, res) => {
+  res.json(buildSystemObservabilitySnapshot({
+    taskId: typeof req.query.taskId === 'string' ? req.query.taskId : undefined,
+    artifactLimit: typeof req.query.artifactLimit === 'string' ? Number(req.query.artifactLimit) : undefined,
+    eventLimit: typeof req.query.eventLimit === 'string' ? Number(req.query.eventLimit) : undefined,
+    sessionLimit: typeof req.query.sessionLimit === 'string' ? Number(req.query.sessionLimit) : undefined,
+  }));
+});
+
+app.get('/api/system/guardrails', authenticate, (_req, res) => {
+  res.json({ generatedAt: new Date().toISOString(), guardrails: getGuardrailRules() });
+});
+
+app.post('/api/system/supervisor/plan', authenticate, (req, res) => {
+  const intent = req.body?.intent;
+  if (!intent || typeof intent !== 'string') {
+    res.status(400).json({ error: 'intent is required' });
+    return;
+  }
+  try {
+    res.json(buildSupervisorPlan({
+      intent,
+      repoPath: typeof req.body?.repoPath === 'string' ? req.body.repoPath : undefined,
+      appId: typeof req.body?.appId === 'string' ? req.body.appId : undefined,
+      operator: typeof req.body?.operator === 'string' ? req.body.operator : undefined,
+      approved: req.body?.approved === true,
+      requestedCommands: Array.isArray(req.body?.requestedCommands) ? req.body.requestedCommands.map(String) : undefined,
+      fileScope: Array.isArray(req.body?.fileScope) ? req.body.fileScope.map(String) : undefined,
+      networkScope: Array.isArray(req.body?.networkScope) ? req.body.networkScope.map(String) : undefined,
+      processScope: Array.isArray(req.body?.processScope) ? req.body.processScope.map(String) : undefined,
+      modelPolicy: req.body?.modelPolicy && typeof req.body.modelPolicy === 'object' ? req.body.modelPolicy : undefined,
+      expectedArtifacts: Array.isArray(req.body?.expectedArtifacts) ? req.body.expectedArtifacts.map(String) : undefined,
+      stopConditions: Array.isArray(req.body?.stopConditions) ? req.body.stopConditions.map(String) : undefined,
+    }, config));
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
 app.post('/api/repos/connect', authenticate, async (req, res) => {
   const repoPath = req.body?.repoPath || req.body?.repo_path;
   if (!repoPath || typeof repoPath !== 'string') {
@@ -1109,6 +1166,8 @@ app.get('/', (_req, res) => {
       repo_connect: '/api/repos/connect', app_open: '/api/apps/open',
       nemoclaw_status: '/api/nemoclaw/status', nemoclaw_action: '/api/nemoclaw/actions', nemoclaw_default: '/api/nemoclaw/default',
       ooda_extensions: '/api/ooda/extensions', ooda_dashboard: '/api/ooda/dashboard', ooda_graph: '/api/ooda/graph', ooda_graph_search: '/api/ooda/graph/search', ooda_graph_refresh: '/api/ooda/graph/refresh', ooda_precision: '/api/ooda/precision',
+      system_architecture: '/api/system/architecture', system_api: '/api/system/api', system_roles: '/api/system/roles',
+      system_observability: '/api/system/observability', system_guardrails: '/api/system/guardrails', system_supervisor_plan: '/api/system/supervisor/plan',
       mcp: config.mcpEnabled ? '/mcp' : 'disabled',
       mermate_render: '/api/render', mermate_tla: '/api/render/tla', mermate_ts: '/api/render/ts',
       absorption_status: '/api/absorption/status', execution_bootstrap: '/api/execution/bootstrap',

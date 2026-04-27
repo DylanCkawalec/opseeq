@@ -429,6 +429,98 @@
 
     <!-- ── v2.5 Systems ─────────────────────────────────────── -->
     <section class="view-panel" id="panel-v25systems" role="tabpanel" aria-labelledby="tab-v25systems" tabindex="0" data-view="v25systems" hidden>
+      <div class="nemoclaw-grid system-contract-grid">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-icon kernel">A</div>
+            <div>
+              <div class="card-title">System Architecture Contract</div>
+              <div class="card-subtitle">Component topology, API design, roles, guardrails, and model routing</div>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="card-stat"><span class="key">Status</span><span class="val" id="system-contract-status">--</span></div>
+            <div class="card-stat"><span class="key">Components</span><span class="val" id="system-components-count">--</span></div>
+            <div class="card-stat"><span class="key">API groups</span><span class="val" id="system-api-groups-count">--</span></div>
+            <div class="card-stat"><span class="key">Roles</span><span class="val" id="system-roles-count">--</span></div>
+            <div class="card-stat"><span class="key">Default model</span><span class="val val-mono" id="system-default-model">--</span></div>
+          </div>
+          <div class="action-row">
+            <button class="btn-open" type="button" id="btn-system-refresh">Refresh System Contract</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <div class="card-icon" style="background:#00cc8822;color:#00cc88;">O</div>
+            <div>
+              <div class="card-title">Unified Observability</div>
+              <div class="card-subtitle">Durable ledgers and TraceRank boundaries</div>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="card-stat"><span class="key">Artifacts</span><span class="val" id="system-artifacts-count">--</span></div>
+            <div class="card-stat"><span class="key">Temporal events</span><span class="val" id="system-events-count">--</span></div>
+            <div class="card-stat"><span class="key">Sessions</span><span class="val" id="system-sessions-count">--</span></div>
+            <div class="card-stat"><span class="key">Extension packs</span><span class="val" id="system-extensions-count">--</span></div>
+            <div class="card-stat"><span class="key">TraceRank</span><span class="val" id="system-tracerank-role">--</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-icon control">C</div>
+          <div>
+            <div class="card-title">Component Topology</div>
+            <div class="card-subtitle">As-built implementation modules and observability hooks</div>
+          </div>
+        </div>
+        <div class="system-contract-list" id="system-component-list">
+          <div class="empty-state">Loading system components...</div>
+        </div>
+      </div>
+
+      <div class="nemoclaw-grid">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-icon" style="background:#7c4dff22;color:#7c4dff;">R</div>
+            <div>
+              <div class="card-title">Agent Role Contracts</div>
+              <div class="card-subtitle">Supervisor, planner, verifier, executor, observer, coder, guardrail, and model-router roles</div>
+            </div>
+          </div>
+          <div class="system-contract-list" id="system-role-list">
+            <div class="empty-state">Loading role contracts...</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <div class="card-icon" style="background:#ff444422;color:#ff4444;">G</div>
+            <div>
+              <div class="card-title">Guardrail Matrix</div>
+              <div class="card-subtitle">Default allow, ask, deny, and hard-block behavior</div>
+            </div>
+          </div>
+          <div class="system-contract-list" id="system-guardrail-list">
+            <div class="empty-state">Loading guardrails...</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-icon control">API</div>
+          <div>
+            <div class="card-title">API Design Groups</div>
+            <div class="card-subtitle">Route contracts with auth and side-effect boundaries</div>
+          </div>
+        </div>
+        <div class="system-contract-list" id="system-api-list">
+          <div class="empty-state">Loading API design...</div>
+        </div>
+      </div>
       <div class="nemoclaw-grid">
         <!-- Absorption Status -->
         <div class="card">

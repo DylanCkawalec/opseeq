@@ -721,6 +721,59 @@ body {
   white-space: pre-wrap;
   line-height: 1.6;
 }
+/* ── System Architecture Contract ───────────────── */
+.system-contract-grid {
+  align-items: stretch;
+}
+.system-contract-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 460px;
+  overflow-y: auto;
+}
+.system-contract-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+.system-contract-item.compact {
+  align-items: center;
+}
+.system-contract-main {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 5px;
+}
+.system-contract-title {
+  font-size: 13px;
+  font-weight: 700;
+}
+.system-contract-meta {
+  font-size: 11px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.7px;
+}
+.system-contract-detail {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+.system-contract-tags {
+  display: flex;
+  justify-content: flex-end;
+  max-width: 44%;
+  flex-wrap: wrap;
+  gap: 6px;
+}
 
 /* ── Sidebar Repos ─────────────────────────────── */
 .sidebar-repos-list {
@@ -826,11 +879,13 @@ body {
   .terminal-input-row,
   .sandbox-item,
   .app-routing-item,
-  .extension-item {
+  .extension-item,
+  .system-contract-item {
     flex-direction: column;
   }
   .sandbox-actions,
   .app-routing-actions { justify-content: flex-start; }
+  .system-contract-tags { max-width: 100%; justify-content: flex-start; }
   .crossrepo-result-item { flex-direction: column; }
   .ooda-ring-wrapper { flex-direction: column; align-items: flex-start; }
   .approval-scope div { grid-template-columns: 1fr; }
